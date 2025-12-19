@@ -1395,7 +1395,7 @@ export default function ChatPage() {
                 </div>
               </div>
             ) : (
-              <div className="max-w-3xl mx-auto py-3">
+              <div className="max-w-4xl mx-auto py-3 px-2 md:px-0">
                 {messages.map((message, index) => (
                   <div
                     key={message.id}

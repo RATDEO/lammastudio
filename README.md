@@ -158,7 +158,7 @@ For OpenAI/Anthropic API compatibility:
 docker compose up litellm
 ```
 
-Then use `http://localhost:4000` as your API endpoint with any OpenAI-compatible client.
+Then use `http://localhost:4100` as your API endpoint with any OpenAI-compatible client.
 
 ## License
 

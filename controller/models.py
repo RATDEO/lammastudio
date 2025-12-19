@@ -98,4 +98,24 @@ class HealthResponse(BaseModel):
     status: str
     version: str
     inference_ready: bool = False
+    # Frontend compatibility: UI expects `backend_reachable`.
+    backend_reachable: bool = False
     running_model: Optional[str] = None
+
+
+class OpenAIModelInfo(BaseModel):
+    """OpenAI-compatible model info."""
+
+    id: str
+    object: str = "model"
+    created: int
+    owned_by: str = "vllm-studio"
+    active: bool = False
+    max_model_len: Optional[int] = None
+
+
+class OpenAIModelList(BaseModel):
+    """OpenAI-compatible model list response."""
+
+    object: str = "list"
+    data: List[OpenAIModelInfo]

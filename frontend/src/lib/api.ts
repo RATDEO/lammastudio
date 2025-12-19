@@ -54,11 +54,11 @@ class APIClient {
   }
 
   async getStatus(): Promise<{ running: boolean; process: ProcessInfo | null; inference_port: number }> {
-    const data = await this.request<{ running_process: ProcessInfo | null; vllm_port: number }>('/status');
+    const data = await this.request<{ running: boolean; process: ProcessInfo | null; inference_port: number }>('/status');
     return {
-      running: !!data.running_process,
-      process: data.running_process,
-      inference_port: data.vllm_port || 8000,
+      running: data.running ?? !!data.process,
+      process: data.process ?? null,
+      inference_port: data.inference_port || 8000,
     };
   }
 

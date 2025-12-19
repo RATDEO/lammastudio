@@ -220,8 +220,8 @@ export function ToolBelt({
   };
 
   return (
-    <div className="px-3 py-2">
-      <div className="max-w-3xl mx-auto">
+    <div className="px-3 py-2 pb-[env(safe-area-inset-bottom,0.5rem)] chat-input-area">
+      <div className="max-w-4xl mx-auto">
         {/* Attachments Preview */}
         {attachments.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-3">
@@ -301,8 +301,8 @@ export function ToolBelt({
             placeholder={disabled ? 'No model running' : placeholder}
             disabled={disabled || isLoading}
             rows={1}
-            className="w-full px-3 py-2 bg-transparent text-sm resize-none focus:outline-none disabled:opacity-50 placeholder:text-[var(--muted)]"
-            style={{ minHeight: '36px', maxHeight: '150px' }}
+            className="w-full px-3 py-2.5 bg-transparent text-base md:text-sm resize-none focus:outline-none disabled:opacity-50 placeholder:text-[var(--muted)]"
+            style={{ minHeight: '44px', maxHeight: '150px', fontSize: '16px' }}
           />
 
           {/* Tool Bar */}
@@ -320,10 +320,10 @@ export function ToolBelt({
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={disabled}
-                className="p-1.5 rounded hover:bg-[var(--accent)] transition-colors disabled:opacity-50"
+                className="p-2 md:p-1.5 rounded hover:bg-[var(--accent)] transition-colors disabled:opacity-50"
                 title="Attach file"
               >
-                <Paperclip className="h-3.5 w-3.5 text-[var(--muted)]" />
+                <Paperclip className="h-4 w-4 md:h-3.5 md:w-3.5 text-[var(--muted)]" />
               </button>
 
               {/* Image Upload */}
@@ -338,10 +338,10 @@ export function ToolBelt({
               <button
                 onClick={() => imageInputRef.current?.click()}
                 disabled={disabled}
-                className="p-1.5 rounded hover:bg-[var(--accent)] transition-colors disabled:opacity-50 hidden sm:inline-flex"
+                className="p-2 md:p-1.5 rounded hover:bg-[var(--accent)] transition-colors disabled:opacity-50"
                 title="Attach image"
               >
-                <ImageIcon className="h-3.5 w-3.5 text-[var(--muted)]" />
+                <ImageIcon className="h-4 w-4 md:h-3.5 md:w-3.5 text-[var(--muted)]" />
               </button>
 
               {/* Audio Recording */}
@@ -387,14 +387,14 @@ export function ToolBelt({
               <button
                 onClick={onMcpToggle}
                 disabled={disabled}
-                className={`flex items-center gap-1 px-2 py-1 rounded transition-colors disabled:opacity-50 ${
+                className={`flex items-center gap-1 px-2.5 py-1.5 md:px-2 md:py-1 rounded transition-colors disabled:opacity-50 ${
                   mcpEnabled
                     ? 'bg-blue-500/20 text-blue-500'
                     : 'hover:bg-[var(--accent)]'
                 }`}
                 title={mcpEnabled ? 'Disable web search & tools' : 'Enable web search & tools'}
               >
-                <Globe className={`h-3.5 w-3.5 ${mcpEnabled ? '' : 'text-[var(--muted)]'}`} />
+                <Globe className={`h-4 w-4 md:h-3.5 md:w-3.5 ${mcpEnabled ? '' : 'text-[var(--muted)]'}`} />
                 <span className={`text-xs ${mcpEnabled ? '' : 'text-[var(--muted)]'} hidden sm:inline`}>Tools</span>
               </button>
 
@@ -402,14 +402,14 @@ export function ToolBelt({
               <button
                 onClick={onArtifactsToggle}
                 disabled={disabled}
-                className={`flex items-center gap-1 px-2 py-1 rounded transition-colors disabled:opacity-50 ${
+                className={`flex items-center gap-1 px-2.5 py-1.5 md:px-2 md:py-1 rounded transition-colors disabled:opacity-50 ${
                   artifactsEnabled
                     ? 'bg-purple-500/20 text-purple-500'
                     : 'hover:bg-[var(--accent)]'
                 }`}
                 title={artifactsEnabled ? 'Disable code preview' : 'Enable code preview & sandbox'}
               >
-                <Code className={`h-3.5 w-3.5 ${artifactsEnabled ? '' : 'text-[var(--muted)]'}`} />
+                <Code className={`h-4 w-4 md:h-3.5 md:w-3.5 ${artifactsEnabled ? '' : 'text-[var(--muted)]'}`} />
                 <span className={`text-xs ${artifactsEnabled ? '' : 'text-[var(--muted)]'} hidden sm:inline`}>Preview</span>
               </button>
 
@@ -447,19 +447,19 @@ export function ToolBelt({
               {isLoading ? (
                 <button
                   onClick={onStop}
-                  className="p-1.5 rounded bg-[var(--error)] text-white hover:opacity-90 transition-opacity"
+                  className="p-2 md:p-1.5 rounded bg-[var(--error)] text-white hover:opacity-90 transition-opacity"
                   title="Stop"
                 >
-                  <StopCircle className="h-3.5 w-3.5" />
+                  <StopCircle className="h-4 w-4 md:h-3.5 md:w-3.5" />
                 </button>
               ) : (
                 <button
                   onClick={handleSubmit}
                   disabled={(!value.trim() && attachments.length === 0) || disabled}
-                  className="p-1.5 rounded bg-[var(--foreground)] text-[var(--background)] hover:opacity-90 transition-opacity disabled:opacity-30"
+                  className="p-2 md:p-1.5 rounded bg-[var(--foreground)] text-[var(--background)] hover:opacity-90 transition-opacity disabled:opacity-30"
                   title="Send"
                 >
-                  <Send className="h-3.5 w-3.5" />
+                  <Send className="h-4 w-4 md:h-3.5 md:w-3.5" />
                 </button>
               )}
             </div>
