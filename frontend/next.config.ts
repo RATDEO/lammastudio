@@ -7,6 +7,15 @@ const nextConfig: NextConfig = {
     'app.homelabai.org',
     'homelabai.org',
   ],
+  async redirects() {
+    return [
+      {
+        source: '/models',
+        destination: '/recipes',
+        permanent: true,
+      },
+    ];
+  },
 };
 
 export default nextConfig;

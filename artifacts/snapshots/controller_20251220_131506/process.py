@@ -55,8 +55,7 @@ def _is_inference_process(cmdline: List[str]) -> Optional[str]:
     joined = " ".join(cmdline)
     if "vllm.entrypoints.openai.api_server" in joined:
         return "vllm"
-    # Check for vllm serve command (may be at position 0, 1, or 2 depending on how invoked)
-    if "vllm" in joined and "serve" in joined:
+    if len(cmdline) >= 2 and cmdline[0].endswith("vllm") and cmdline[1] == "serve":
         return "vllm"
     if "sglang.launch_server" in joined:
         return "sglang"
@@ -76,14 +75,8 @@ def find_inference_process(port: int) -> Optional[ProcessInfo]:
                 continue
             # Extract model path
             model_path = _extract_flag(cmdline, "--model") or _extract_flag(cmdline, "--model-path")
-            if not model_path:
-                # Find "serve" anywhere in cmdline and get the next non-flag arg
-                try:
-                    serve_idx = cmdline.index("serve")
-                    if serve_idx + 1 < len(cmdline) and not cmdline[serve_idx + 1].startswith("-"):
-                        model_path = cmdline[serve_idx + 1]
-                except ValueError:
-                    pass
+            if not model_path and len(cmdline) >= 3 and cmdline[1] == "serve":
+                model_path = cmdline[2] if not cmdline[2].startswith("-") else None
             return ProcessInfo(
                 pid=proc.info["pid"],
                 backend=backend,

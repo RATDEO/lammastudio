@@ -248,16 +248,8 @@ async def list_models_openai(store: RecipeStore = Depends(get_store)):
         max_model_len = recipe.max_model_len
 
         # Check if this recipe is the currently running model
-        if current:
-            # Match by served_model_name first (most reliable)
-            if current.served_model_name and recipe.served_model_name == current.served_model_name:
-                is_active = True
-            # Or match by model_path
-            elif current.model_path:
-                if recipe.model_path in current.model_path or current.model_path in recipe.model_path:
-                    is_active = True
-                elif current.model_path.split("/")[-1] == recipe.model_path.split("/")[-1]:
-                    is_active = True
+        if current and current.model_path and recipe.model_path in current.model_path:
+            is_active = True
             # Try to get max_model_len from the active model's endpoint
             if active_model_data and "data" in active_model_data:
                 for model in active_model_data["data"]:
@@ -336,17 +328,8 @@ async def list_recipes(store: RecipeStore = Depends(get_store)):
     result = []
     for r in recipes:
         status = "stopped"
-        if current:
-            # Match by served_model_name first (most reliable)
-            if current.served_model_name and r.served_model_name == current.served_model_name:
-                status = "running"
-            # Or match by model_path (check both directions for relative/absolute paths)
-            elif current.model_path:
-                if r.model_path in current.model_path or current.model_path in r.model_path:
-                    status = "running"
-                # Also check basename match
-                elif current.model_path.split("/")[-1] == r.model_path.split("/")[-1]:
-                    status = "running"
+        if current and current.model_path and r.model_path in current.model_path:
+            status = "running"
         result.append({**r.model_dump(), "status": status})
     return result
 
@@ -807,43 +790,3 @@ async def call_mcp_tool(server: str, tool_name: str, payload: dict):
             }
 
     raise HTTPException(status_code=404, detail="Unknown MCP tool")
-
-@app.get("/v1/studio/models", tags=["OpenAI Compatible"])
-async def list_studio_models():
-    """List available models from the models directory."""
-    from pathlib import Path
-    
-    models = []
-    models_dir = Path(settings.models_dir)
-    
-    if models_dir.exists():
-        for item in models_dir.iterdir():
-            if item.is_dir() and not item.name.startswith("."):
-                # Skip non-model directories
-                if any(item.name.startswith(x) for x in ["FLUX", "playground", "Hunyuan", "whisper", "Vibe"]):
-                    continue
-                    
-                # Get size
-                size_bytes = 0
-                try:
-                    for f in item.rglob("*.safetensors"):
-                        size_bytes += f.stat().st_size
-                    for f in item.rglob("*.bin"):
-                        size_bytes += f.stat().st_size
-                except:
-                    pass
-                
-                # Get modified time
-                try:
-                    modified_at = item.stat().st_mtime
-                except:
-                    modified_at = None
-                
-                models.append({
-                    "path": str(item),
-                    "name": item.name,
-                    "size_bytes": size_bytes if size_bytes > 0 else None,
-                    "modified_at": modified_at,
-                })
-    
-    return {"models": models}

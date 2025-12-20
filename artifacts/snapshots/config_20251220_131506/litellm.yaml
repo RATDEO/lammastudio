@@ -6,7 +6,7 @@ model_list:
   - model_name: "*"
     litellm_params:
       model: "hosted_vllm/*"
-      api_base: "http://192.168.1.70:8000/v1"
+      api_base: "http://host.docker.internal:8000/v1"
       stream_timeout: 600
       timeout: 600
       # Support for extended features
