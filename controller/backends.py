@@ -98,6 +98,8 @@ def build_sglang_command(recipe: Recipe) -> List[str]:
         cmd.append("--trust-remote-code")
     if recipe.quantization:
         cmd.extend(["--quantization", recipe.quantization])
+    if recipe.kv_cache_dtype and recipe.kv_cache_dtype != "auto":
+        cmd.extend(["--kv-cache-dtype", recipe.kv_cache_dtype])
 
     _append_extra_args(cmd, recipe.extra_args)
     return cmd
@@ -106,7 +108,7 @@ def build_sglang_command(recipe: Recipe) -> List[str]:
 def _append_extra_args(cmd: List[str], extra_args: dict) -> None:
     """Append extra CLI arguments to command."""
     # Keys that are used by the controller, not passed to the backend
-    INTERNAL_KEYS = {"venv_path", "env_vars", "cuda_visible_devices", "description", "tags"}
+    INTERNAL_KEYS = {"venv_path", "env_vars", "cuda_visible_devices", "description", "tags", "status"}
 
     for key, value in extra_args.items():
         normalized_key = key.replace("-", "_").lower()

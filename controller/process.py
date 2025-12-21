@@ -26,6 +26,9 @@ def _extract_flag(cmdline: List[str], flag: str) -> Optional[str]:
 def _build_env(recipe: Recipe) -> Dict[str, str]:
     env = os.environ.copy()
 
+    # Bypass flashinfer version check (common issue with vLLM)
+    env["FLASHINFER_DISABLE_VERSION_CHECK"] = "1"
+
     env_vars = (
         recipe.extra_args.get("env_vars")
         or recipe.extra_args.get("env-vars")

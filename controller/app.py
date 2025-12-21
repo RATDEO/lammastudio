@@ -434,8 +434,18 @@ async def launch(recipe_id: str, force: bool = False, store: RecipeStore = Depen
         start = time.time()
         timeout = 300
         ready = False
+        crashed = False
 
         while time.time() - start < timeout:
+            # Check if process has crashed
+            try:
+                import psutil
+                if pid and not psutil.pid_exists(pid):
+                    crashed = True
+                    break
+            except Exception:
+                pass
+
             try:
                 async with httpx.AsyncClient(timeout=5) as client:
                     r = await client.get(f"http://localhost:{settings.inference_port}/health")
@@ -452,6 +462,20 @@ async def launch(recipe_id: str, force: bool = False, store: RecipeStore = Depen
                 progress=0.5 + (elapsed / timeout) * 0.5
             )
             await asyncio.sleep(3)
+
+        if crashed:
+            # Read the last lines from the log file for error context
+            log_file = Path(f"/tmp/vllm_{recipe_id}.log")
+            error_tail = ""
+            if log_file.exists():
+                try:
+                    error_tail = log_file.read_text()[-1000:]
+                except Exception:
+                    pass
+            await event_manager.publish_launch_progress(
+                recipe_id, "error", f"Model process crashed. Check logs for details.", progress=0.0
+            )
+            return LaunchResult(success=False, pid=None, message=f"Process crashed: {error_tail[-200:]}", log_file=str(log_file))
 
         if ready:
             await event_manager.publish_launch_progress(
