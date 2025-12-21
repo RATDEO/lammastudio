@@ -1221,30 +1221,7 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)]">
-      {/* Mobile Header */}
-      {isMobile && (
-        <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--border)] bg-[var(--card)]">
-          <button
-            onClick={() => setSidebarCollapsed(false)}
-            className="p-2 rounded-lg hover:bg-[var(--accent)] transition-colors"
-            title="Chat history"
-          >
-            <Menu className="h-5 w-5" />
-          </button>
-          <span className="text-sm font-medium truncate mx-2">
-            {selectedModel || modelName || 'Chat'}
-          </span>
-          <button
-            onClick={createSession}
-            className="p-2 rounded-lg hover:bg-[var(--accent)] transition-colors"
-            title="New chat"
-          >
-            <Plus className="h-5 w-5" />
-          </button>
-        </div>
-      )}
-
+    <div className="flex flex-col h-[calc(100vh-3rem)] md:h-[calc(100vh-3.5rem)]">
       <div className="flex flex-1 min-h-0">
         {/* Sidebar */}
         <ChatSidebar
@@ -1261,170 +1238,196 @@ export default function ChatPage() {
 
         {/* Main Chat Area */}
         <div className="flex-1 flex flex-col min-w-0">
-          {/* Desktop Header */}
-          {!isMobile && (
-            <div className="flex items-center justify-between gap-3 px-4 py-2 border-b border-[var(--border)] bg-[var(--card)]">
-              <div className="flex items-center gap-2 min-w-0">
-                {editingTitle ? (
-                  <div className="flex items-center gap-2 min-w-0">
-                    <input
-                      value={titleDraft}
-                      onChange={(e) => setTitleDraft(e.target.value)}
-                      className="px-2 py-1 text-sm bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--foreground)] min-w-0 w-64"
-                      placeholder="Chat title"
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') saveTitle();
-                        if (e.key === 'Escape') setEditingTitle(false);
-                      }}
-                      autoFocus
-                    />
-                    <button
-                      onClick={saveTitle}
-                      className="p-1.5 rounded hover:bg-[var(--accent)] transition-colors"
-                      title="Save title"
-                    >
-                      <CheckCircle2 className="h-4 w-4 text-[var(--success)]" />
-                    </button>
-                    <button
-                      onClick={() => setEditingTitle(false)}
-                      className="p-1.5 rounded hover:bg-[var(--accent)] transition-colors"
-                      title="Cancel"
-                    >
-                      <X className="h-4 w-4 text-[var(--muted)]" />
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <div className="text-sm font-medium truncate" title={currentSessionTitle}>
-                      {currentSessionTitle || 'Chat'}
-                    </div>
-                    {currentSessionId && (
-                      <button
-                        onClick={() => {
-                          setTitleDraft(currentSessionTitle);
-                          setEditingTitle(true);
-                        }}
-                        className="p-1 rounded hover:bg-[var(--accent)] transition-colors"
-                        title="Rename chat"
-                      >
-                        <Pencil className="h-3.5 w-3.5 text-[var(--muted)]" />
-                      </button>
-                    )}
-                    {selectedModel && (
-                      <span className="text-[10px] font-mono text-[var(--muted)] px-2 py-0.5 border border-[var(--border)] rounded">
-                        {selectedModel}
-                      </span>
-                    )}
-                  </>
-                )}
-              </div>
+          {/* Chat Header */}
+          <div className="flex items-center justify-between gap-2 md:gap-3 px-3 md:px-4 py-2 border-b border-[var(--border)] bg-[var(--card)]">
+            <div className="flex items-center gap-2 min-w-0">
+              {/* Mobile: History button */}
+              {isMobile && (
+                <button
+                  onClick={() => setSidebarCollapsed(false)}
+                  className="p-1.5 -ml-1 rounded-lg hover:bg-[var(--accent)] transition-colors"
+                  title="Chat history"
+                >
+                  <Menu className="h-5 w-5" />
+                </button>
+              )}
 
-              <div className="flex items-center gap-2 flex-shrink-0">
-                {currentSessionId && sessionUsage && (
+              {editingTitle ? (
+                <div className="flex items-center gap-2 min-w-0">
+                  <input
+                    value={titleDraft}
+                    onChange={(e) => setTitleDraft(e.target.value)}
+                    className="px-2 py-1 text-sm bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[var(--foreground)] min-w-0 w-48 md:w-64"
+                    placeholder="Chat title"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') saveTitle();
+                      if (e.key === 'Escape') setEditingTitle(false);
+                    }}
+                    autoFocus
+                  />
                   <button
-                    onClick={() => setUsageDetailsOpen(true)}
-                    className="text-[10px] font-mono text-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
-                    title="Usage details"
+                    onClick={saveTitle}
+                    className="p-1.5 rounded hover:bg-[var(--accent)] transition-colors"
+                    title="Save title"
                   >
-                    {sessionUsage.total_tokens.toLocaleString()} tok
-                    {sessionUsage.estimated_cost_usd != null ? ` • $${sessionUsage.estimated_cost_usd.toFixed(4)}` : ''}
+                    <CheckCircle2 className="h-4 w-4 text-[var(--success)]" />
                   </button>
-                )}
+                  <button
+                    onClick={() => setEditingTitle(false)}
+                    className="p-1.5 rounded hover:bg-[var(--accent)] transition-colors"
+                    title="Cancel"
+                  >
+                    <X className="h-4 w-4 text-[var(--muted)]" />
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="text-sm font-medium truncate max-w-[120px] md:max-w-none" title={currentSessionTitle}>
+                    {currentSessionTitle || 'Chat'}
+                  </div>
+                  {currentSessionId && !isMobile && (
+                    <button
+                      onClick={() => {
+                        setTitleDraft(currentSessionTitle);
+                        setEditingTitle(true);
+                      }}
+                      className="p-1 rounded hover:bg-[var(--accent)] transition-colors"
+                      title="Rename chat"
+                    >
+                      <Pencil className="h-3.5 w-3.5 text-[var(--muted)]" />
+                    </button>
+                  )}
+                  {selectedModel && !isMobile && (
+                    <span className="text-[10px] font-mono text-[var(--muted)] px-2 py-0.5 border border-[var(--border)] rounded">
+                      {selectedModel.split('/').pop()}
+                    </span>
+                  )}
+                </>
+              )}
+            </div>
 
-                <button
-                  onClick={() => setMcpEnabled((v) => !v)}
-                  className={`flex items-center gap-1 px-2 py-1 rounded border text-xs transition-colors ${
-                    mcpEnabled ? 'border-blue-500/40 bg-blue-500/10 text-blue-400' : 'border-[var(--border)] text-[var(--muted)] hover:bg-[var(--accent)]'
-                  }`}
-                  title="Toggle tools"
-                >
-                  <Globe className="h-3.5 w-3.5" />
-                  Tools
-                </button>
-                <button
-                  onClick={() => setArtifactsEnabled((v) => !v)}
-                  className={`flex items-center gap-1 px-2 py-1 rounded border text-xs transition-colors ${
-                    artifactsEnabled ? 'border-purple-500/40 bg-purple-500/10 text-purple-400' : 'border-[var(--border)] text-[var(--muted)] hover:bg-[var(--accent)]'
-                  }`}
-                  title="Toggle previews"
-                >
-                  <Code className="h-3.5 w-3.5" />
-                  Preview
-                </button>
-                <button
-                  onClick={() => setExportOpen(true)}
-                  className="p-2 rounded border border-[var(--border)] hover:bg-[var(--accent)] transition-colors"
-                  title="Export chat"
-                >
-                  <Download className="h-4 w-4 text-[var(--muted)]" />
-                </button>
+            <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
+              {/* Usage (desktop only) */}
+              {!isMobile && currentSessionId && sessionUsage && (
                 <button
                   onClick={() => setUsageDetailsOpen(true)}
-                  className="p-2 rounded border border-[var(--border)] hover:bg-[var(--accent)] transition-colors"
+                  className="text-[10px] font-mono text-[var(--muted)] hover:text-[var(--foreground)] transition-colors"
                   title="Usage details"
                 >
-                  <BarChart3 className="h-4 w-4 text-[var(--muted)]" />
+                  {sessionUsage.total_tokens.toLocaleString()} tok
+                  {sessionUsage.estimated_cost_usd != null ? ` • $${sessionUsage.estimated_cost_usd.toFixed(4)}` : ''}
                 </button>
-                <button
-                  onClick={() => setChatSettingsOpen(true)}
-                  className="p-2 rounded border border-[var(--border)] hover:bg-[var(--accent)] transition-colors"
-                  title="Chat settings"
-                >
-                  <Settings className="h-4 w-4 text-[var(--muted)]" />
-                </button>
-                <button
-                  onClick={createSession}
-                  className="p-2 rounded border border-[var(--border)] hover:bg-[var(--accent)] transition-colors"
-                  title="New chat"
-                >
-                  <Plus className="h-4 w-4 text-[var(--muted)]" />
-                </button>
-              </div>
+              )}
+
+              {/* Toggle buttons (desktop only) */}
+              {!isMobile && (
+                <>
+                  <button
+                    onClick={() => setMcpEnabled((v) => !v)}
+                    className={`flex items-center gap-1 px-2 py-1 rounded border text-xs transition-colors ${
+                      mcpEnabled ? 'border-blue-500/40 bg-blue-500/10 text-blue-400' : 'border-[var(--border)] text-[var(--muted)] hover:bg-[var(--accent)]'
+                    }`}
+                    title="Toggle tools"
+                  >
+                    <Globe className="h-3.5 w-3.5" />
+                    Tools
+                  </button>
+                  <button
+                    onClick={() => setArtifactsEnabled((v) => !v)}
+                    className={`flex items-center gap-1 px-2 py-1 rounded border text-xs transition-colors ${
+                      artifactsEnabled ? 'border-purple-500/40 bg-purple-500/10 text-purple-400' : 'border-[var(--border)] text-[var(--muted)] hover:bg-[var(--accent)]'
+                    }`}
+                    title="Toggle previews"
+                  >
+                    <Code className="h-3.5 w-3.5" />
+                    Preview
+                  </button>
+                </>
+              )}
+
+              {/* Action buttons */}
+              <button
+                onClick={() => setChatSettingsOpen(true)}
+                className="p-1.5 md:p-2 rounded md:border border-[var(--border)] hover:bg-[var(--accent)] transition-colors"
+                title="Chat settings"
+              >
+                <Settings className="h-4 w-4 text-[var(--muted)]" />
+              </button>
+              {!isMobile && (
+                <>
+                  <button
+                    onClick={() => setExportOpen(true)}
+                    className="p-2 rounded border border-[var(--border)] hover:bg-[var(--accent)] transition-colors"
+                    title="Export chat"
+                  >
+                    <Download className="h-4 w-4 text-[var(--muted)]" />
+                  </button>
+                  <button
+                    onClick={() => setUsageDetailsOpen(true)}
+                    className="p-2 rounded border border-[var(--border)] hover:bg-[var(--accent)] transition-colors"
+                    title="Usage details"
+                  >
+                    <BarChart3 className="h-4 w-4 text-[var(--muted)]" />
+                  </button>
+                </>
+              )}
+              <button
+                onClick={createSession}
+                className="p-1.5 md:p-2 rounded md:border border-[var(--border)] hover:bg-[var(--accent)] transition-colors"
+                title="New chat"
+              >
+                <Plus className="h-4 w-4 text-[var(--muted)]" />
+              </button>
             </div>
-          )}
+          </div>
 
           {/* Messages */}
           <div className="flex-1 overflow-y-auto">
             {messages.length === 0 ? (
               <div className="flex items-center justify-center h-full">
-                <div className="text-center px-4 animate-fade-in">
-                  <Sparkles className="h-6 w-6 text-[var(--muted)] mx-auto mb-3" />
-                  <p className="text-sm text-[var(--muted)]">
-                    {selectedModel || runningModel ? 'Send a message to start' : 'Select a model in Settings to start'}
+                <div className="text-center px-6 py-8 animate-fade-in">
+                  <div className="w-12 h-12 rounded-2xl bg-[var(--accent)] flex items-center justify-center mx-auto mb-4">
+                    <Sparkles className="h-6 w-6 text-[var(--muted-foreground)]" />
+                  </div>
+                  <h2 className="text-lg font-medium mb-2">Start a conversation</h2>
+                  <p className="text-sm text-[var(--muted)] max-w-xs mx-auto">
+                    {selectedModel || runningModel
+                      ? 'Send a message to begin chatting with your model.'
+                      : 'Select a model in Settings to get started.'}
                   </p>
                 </div>
               </div>
             ) : (
-              <div className="max-w-4xl mx-auto py-3 px-2 md:px-0">
+              <div className="max-w-3xl mx-auto py-4 px-3 md:px-4 space-y-1">
                 {messages.map((message, index) => (
                   <div
                     key={message.id}
-                    className={`px-4 py-2 animate-slide-up ${
+                    className={`px-3 md:px-4 py-3 rounded-xl animate-slide-up ${
                       message.role === 'assistant' ? 'bg-[var(--card)]' : ''
                     }`}
                   >
                     <div className="flex gap-3">
                       <div
-                        className={`w-6 h-6 rounded flex items-center justify-center flex-shrink-0 ${
+                        className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${
                           message.role === 'user'
                             ? 'bg-[var(--accent)]'
-                            : 'bg-[var(--success)]/20'
+                            : 'bg-[var(--success)]/15'
                         }`}
                       >
                         {message.role === 'user' ? (
-                          <User className="h-3 w-3" />
+                          <User className="h-3.5 w-3.5" />
                         ) : (
                           <Sparkles
-                            className={`h-3 w-3 text-[var(--success)] ${
+                            className={`h-3.5 w-3.5 text-[var(--success)] ${
                               message.isStreaming ? 'animate-pulse-soft' : ''
                             }`}
                           />
                         )}
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-xs text-[var(--muted)]">
-                            {message.role === 'user' ? 'You' : (message.model || selectedModel || modelName || 'Assistant')}
+                      <div className="flex-1 min-w-0 pt-0.5">
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <span className="text-xs font-medium text-[var(--muted-foreground)]">
+                            {message.role === 'user' ? 'You' : (message.model?.split('/').pop() || selectedModel?.split('/').pop() || modelName || 'Assistant')}
                           </span>
                           {(message.total_tokens || message.prompt_tokens || message.completion_tokens) && (
                             <span className="text-[10px] text-[var(--muted)] font-mono">
@@ -1510,16 +1513,16 @@ export default function ChatPage() {
                 {isLoading &&
                   messages[messages.length - 1]?.role === 'assistant' &&
                   messages[messages.length - 1]?.content === '' && (
-                    <div className="px-4 py-2 bg-[var(--card)]">
+                    <div className="px-3 md:px-4 py-3 rounded-xl bg-[var(--card)]">
                       <div className="flex gap-3">
-                        <div className="w-6 h-6 rounded bg-[var(--success)]/20 flex items-center justify-center">
-                          <Sparkles className="h-3 w-3 text-[var(--success)] animate-pulse-soft" />
+                        <div className="w-7 h-7 rounded-lg bg-[var(--success)]/15 flex items-center justify-center">
+                          <Sparkles className="h-3.5 w-3.5 text-[var(--success)] animate-pulse-soft" />
                         </div>
-                        <div className="flex items-center">
-                          <div className="flex gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-[var(--muted)] animate-pulse-soft" />
-                            <span className="w-1.5 h-1.5 rounded-full bg-[var(--muted)] animate-pulse-soft" style={{ animationDelay: '150ms' }} />
-                            <span className="w-1.5 h-1.5 rounded-full bg-[var(--muted)] animate-pulse-soft" style={{ animationDelay: '300ms' }} />
+                        <div className="flex items-center pt-1">
+                          <div className="flex gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-[var(--muted)] animate-pulse-soft" />
+                            <span className="w-2 h-2 rounded-full bg-[var(--muted)] animate-pulse-soft" style={{ animationDelay: '150ms' }} />
+                            <span className="w-2 h-2 rounded-full bg-[var(--muted)] animate-pulse-soft" style={{ animationDelay: '300ms' }} />
                           </div>
                         </div>
                       </div>

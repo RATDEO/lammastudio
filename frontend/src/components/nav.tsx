@@ -13,21 +13,20 @@ import {
   X,
   RefreshCw,
   Square,
-  Play,
   Download,
   Upload,
-  Search
+  Search,
+  ChevronRight,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import api from '@/lib/api';
 import { CommandPalette, type CommandPaletteAction } from '@/components/command-palette';
 
 const navItems = [
-  { href: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/chat', label: 'Chat', icon: MessageSquare },
-  { href: '/recipes', label: 'Recipes', icon: Settings },
-  { href: '/logs', label: 'Logs', icon: FileText },
-  { href: '/models', label: 'Models', icon: Layers },
+  { href: '/', label: 'Dashboard', icon: LayoutDashboard, description: 'System status & overview' },
+  { href: '/chat', label: 'Chat', icon: MessageSquare, description: 'Talk to your models' },
+  { href: '/recipes', label: 'Recipes', icon: Settings, description: 'Model configurations' },
+  { href: '/logs', label: 'Logs', icon: FileText, description: 'View backend logs' },
 ];
 
 export default function Nav() {
@@ -38,6 +37,7 @@ export default function Nav() {
   const [apiKeyOpen, setApiKeyOpen] = useState(false);
   const [apiKeyValue, setApiKeyValue] = useState('');
   const [apiKeySet, setApiKeySet] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [status, setStatus] = useState<{ online: boolean; inferenceOnline: boolean; model?: string }>({
     online: false,
     inferenceOnline: false,
@@ -311,14 +311,23 @@ export default function Nav() {
         </div>
       ) : null}
 
-      {/* Desktop Nav */}
+      {/* Header */}
       <header className="sticky top-0 z-50 border-b border-[var(--border)] bg-[var(--card)]">
-        <div className="flex h-14 items-center justify-between px-4">
+        <div className="flex h-12 md:h-14 items-center justify-between px-3 md:px-4">
           {/* Logo & Nav Links */}
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-3 md:gap-6">
+            {/* Mobile Menu Button */}
+            <button
+              onClick={() => setMobileMenuOpen(true)}
+              className="md:hidden p-1.5 -ml-1.5 rounded-lg hover:bg-[var(--accent)] transition-colors"
+              aria-label="Open menu"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+
             <Link href="/" className="flex items-center gap-2 font-semibold">
               <Layers className="h-5 w-5 text-[var(--accent)]" />
-              <span>vLLM Studio</span>
+              <span className="hidden sm:inline">vLLM Studio</span>
             </Link>
 
             <nav className="hidden md:flex items-center gap-1">
@@ -344,18 +353,18 @@ export default function Nav() {
           </div>
 
           {/* Right Side */}
-          <div className="flex items-center gap-3">
-            {/* Status */}
-            <div className="hidden sm:flex items-center gap-2 text-sm">
-              <div className={`w-2 h-2 rounded-full ${status.online ? 'bg-[var(--success)]' : 'bg-[var(--error)]'}`} />
-              <span className="text-[var(--muted-foreground)]">
-                {status.inferenceOnline ? (status.model || 'No model') : 'Inference offline'}
+          <div className="flex items-center gap-2 md:gap-3">
+            {/* Status - shown on all screens */}
+            <div className="flex items-center gap-1.5 md:gap-2 text-xs md:text-sm">
+              <div className={`w-2 h-2 rounded-full flex-shrink-0 ${status.online ? 'bg-[var(--success)]' : 'bg-[var(--error)]'}`} />
+              <span className="text-[var(--muted-foreground)] truncate max-w-[100px] md:max-w-none">
+                {status.inferenceOnline ? (status.model || 'Ready') : status.online ? 'No model' : 'Offline'}
               </span>
             </div>
 
             <button
               onClick={() => setApiKeyOpen(true)}
-              className="hidden md:flex items-center gap-2 px-3 py-2 text-sm border border-[var(--border)] rounded-md hover:bg-[var(--card-hover)] transition-colors"
+              className="hidden md:flex items-center gap-2 px-3 py-1.5 text-sm border border-[var(--border)] rounded-md hover:bg-[var(--card-hover)] transition-colors"
               title={apiKeySet ? 'API key set (click to update)' : 'Set API key'}
             >
               <Key className="h-4 w-4" />
@@ -364,15 +373,15 @@ export default function Nav() {
 
             <button
               onClick={() => setPaletteOpen(true)}
-              className="md:hidden p-2 rounded-md border border-[var(--border)] hover:bg-[var(--card-hover)] transition-colors"
-              title="Search (command palette)"
+              className="p-2 md:hidden rounded-md hover:bg-[var(--card-hover)] transition-colors"
+              title="Search"
             >
               <Search className="h-4 w-4 text-[var(--muted-foreground)]" />
             </button>
 
             <button
               onClick={() => setPaletteOpen(true)}
-              className="hidden md:flex items-center gap-2 px-3 py-2 text-sm border border-[var(--border)] rounded-md hover:bg-[var(--card-hover)] transition-colors"
+              className="hidden md:flex items-center gap-2 px-3 py-1.5 text-sm border border-[var(--border)] rounded-md hover:bg-[var(--card-hover)] transition-colors"
               title="Command palette (Ctrl/⌘K)"
             >
               <Search className="h-4 w-4" />
@@ -429,27 +438,95 @@ export default function Nav() {
         </div>
       </header>
 
-      {/* Mobile Bottom Nav */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-[var(--border)] bg-[var(--card)]">
-        <div className="flex justify-around">
-          {navItems.slice(0, 4).map((item) => {
-            const Icon = item.icon;
-            const isActive = pathname === item.href;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex flex-col items-center gap-1 py-3 px-4 text-xs ${
-                  isActive ? 'text-[var(--accent)]' : 'text-[var(--muted-foreground)]'
-                }`}
+      {/* Mobile Slide-out Menu */}
+      {mobileMenuOpen && (
+        <div className="md:hidden fixed inset-0 z-[60]">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/60 animate-fade-in"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+          {/* Drawer */}
+          <div className="absolute left-0 top-0 bottom-0 w-72 bg-[var(--card)] border-r border-[var(--border)] animate-slide-in-left">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-[var(--border)]">
+              <div className="flex items-center gap-2">
+                <Layers className="h-5 w-5 text-[var(--accent)]" />
+                <span className="font-semibold">vLLM Studio</span>
+              </div>
+              <button
+                onClick={() => setMobileMenuOpen(false)}
+                className="p-2 rounded-lg hover:bg-[var(--accent)] transition-colors"
               >
-                <Icon className="h-5 w-5" />
-                <span>{item.label}</span>
-              </Link>
-            );
-          })}
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Status */}
+            <div className="px-4 py-3 border-b border-[var(--border)]">
+              <div className="flex items-center gap-2">
+                <div className={`w-2 h-2 rounded-full ${status.online ? 'bg-[var(--success)]' : 'bg-[var(--error)]'}`} />
+                <span className="text-sm text-[var(--muted-foreground)]">
+                  {status.inferenceOnline ? (status.model || 'No model') : status.online ? 'Inference offline' : 'Offline'}
+                </span>
+              </div>
+            </div>
+
+            {/* Navigation */}
+            <nav className="p-2">
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = pathname === item.href;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`flex items-center gap-3 px-3 py-3 rounded-lg transition-colors ${
+                      isActive
+                        ? 'bg-[var(--accent)] text-[var(--foreground)]'
+                        : 'text-[var(--muted-foreground)] hover:bg-[var(--card-hover)] hover:text-[var(--foreground)]'
+                    }`}
+                  >
+                    <Icon className="h-5 w-5" />
+                    <div className="flex-1">
+                      <div className="font-medium">{item.label}</div>
+                      <div className="text-xs text-[var(--muted)]">{item.description}</div>
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-[var(--muted)]" />
+                  </Link>
+                );
+              })}
+            </nav>
+
+            {/* Actions */}
+            <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-[var(--border)] bg-[var(--card)]">
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    setApiKeyOpen(true);
+                  }}
+                  className="flex items-center justify-center gap-2 px-3 py-2.5 text-sm border border-[var(--border)] rounded-lg hover:bg-[var(--card-hover)] transition-colors"
+                >
+                  <Key className="h-4 w-4" />
+                  {apiKeySet ? 'Key Set' : 'API Key'}
+                </button>
+                <button
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    setPaletteOpen(true);
+                  }}
+                  className="flex items-center justify-center gap-2 px-3 py-2.5 text-sm border border-[var(--border)] rounded-lg hover:bg-[var(--card-hover)] transition-colors"
+                >
+                  <Search className="h-4 w-4" />
+                  Search
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
-      </nav>
+      )}
     </>
   );
 }

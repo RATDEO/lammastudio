@@ -71,30 +71,33 @@ export function ChatSidebar({
       <>
         {/* Backdrop */}
         <div
-          className="fixed inset-0 bg-black/50 z-40"
+          className="fixed inset-0 bg-black/60 z-40 animate-fade-in"
           onClick={onToggleCollapse}
         />
         {/* Sidebar */}
-        <div className="fixed left-0 top-0 bottom-0 w-64 bg-[var(--background)] border-r border-[var(--border)] flex flex-col z-50 animate-slide-in-left">
+        <div className="fixed left-0 top-0 bottom-0 w-72 bg-[var(--card)] border-r border-[var(--border)] flex flex-col z-50 animate-slide-in-left">
           {/* Header */}
-          <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--border)]">
-            <span className="text-sm font-medium">Chat History</span>
+          <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)]">
+            <div className="flex items-center gap-2">
+              <MessageSquare className="h-4 w-4 text-[var(--muted)]" />
+              <span className="font-medium">Conversations</span>
+            </div>
             <button
               onClick={onToggleCollapse}
-              className="p-1.5 rounded hover:bg-[var(--accent)] transition-colors"
+              className="p-2 rounded-lg hover:bg-[var(--accent)] transition-colors"
             >
               <X className="h-4 w-4" />
             </button>
           </div>
 
           {/* New Chat Button */}
-          <div className="px-2 py-2 border-b border-[var(--border)]">
+          <div className="px-3 py-3">
             <button
               onClick={() => {
                 onNewSession();
                 onToggleCollapse();
               }}
-              className="w-full flex items-center justify-center gap-2 text-sm bg-[var(--accent)] hover:bg-[var(--accent)]/80 px-3 py-2 rounded-lg transition-colors"
+              className="w-full flex items-center justify-center gap-2 text-sm bg-[var(--foreground)] text-[var(--background)] px-4 py-2.5 rounded-lg hover:opacity-90 transition-opacity font-medium"
             >
               <Plus className="h-4 w-4" />
               <span>New Chat</span>
@@ -102,58 +105,64 @@ export function ChatSidebar({
           </div>
 
           {/* Sessions */}
-          <div className="flex-1 overflow-y-auto py-2">
+          <div className="flex-1 overflow-y-auto px-2 pb-[env(safe-area-inset-bottom,1rem)]">
             {isLoading ? (
-              <div className="flex justify-center py-4">
-                <div className="flex gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--muted)] animate-pulse" />
-                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--muted)] animate-pulse" style={{ animationDelay: '150ms' }} />
-                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--muted)] animate-pulse" style={{ animationDelay: '300ms' }} />
+              <div className="flex justify-center py-8">
+                <div className="flex gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-[var(--muted)] animate-pulse-soft" />
+                  <span className="w-2 h-2 rounded-full bg-[var(--muted)] animate-pulse-soft" style={{ animationDelay: '150ms' }} />
+                  <span className="w-2 h-2 rounded-full bg-[var(--muted)] animate-pulse-soft" style={{ animationDelay: '300ms' }} />
                 </div>
               </div>
             ) : sessions.length === 0 ? (
-              <div className="text-center py-8 text-sm text-[var(--muted)]">
-                No chat history
+              <div className="text-center py-12">
+                <MessageSquare className="h-8 w-8 text-[var(--muted)] mx-auto mb-3 opacity-50" />
+                <p className="text-sm text-[var(--muted)]">No conversations yet</p>
+                <p className="text-xs text-[var(--muted)] mt-1">Start a new chat to begin</p>
               </div>
             ) : (
-              sessions.map((session) => (
-                <div
-                  key={session.id}
-                  className={`group relative mx-2 mb-1 rounded-lg ${
-                    currentSessionId === session.id
-                      ? 'bg-[var(--accent)]'
-                      : 'hover:bg-[var(--accent)]/50'
-                  }`}
-                >
-                  <button
-                    onClick={() => {
-                      onSelectSession(session.id);
-                      onToggleCollapse();
-                    }}
-                    className="w-full px-3 py-2 text-left"
+              <div className="space-y-1">
+                {sessions.map((session) => (
+                  <div
+                    key={session.id}
+                    className={`group relative rounded-lg transition-colors ${
+                      currentSessionId === session.id
+                        ? 'bg-[var(--accent)]'
+                        : 'hover:bg-[var(--card-hover)]'
+                    }`}
                   >
-                    <span className="text-sm truncate block">{session.title}</span>
-                    {session.model && (
-                      <span className="text-xs text-[var(--muted)] font-mono truncate block">
-                        {session.parent_id ? '↳ ' : ''}{session.model}
-                      </span>
-                    )}
-                    <span className="text-xs text-[var(--muted)]">
-                      {new Date(session.updated_at).toLocaleDateString()}
-                    </span>
-                  </button>
+                    <button
+                      onClick={() => {
+                        onSelectSession(session.id);
+                        onToggleCollapse();
+                      }}
+                      className="w-full px-3 py-2.5 text-left"
+                    >
+                      <span className="text-sm font-medium truncate block">{session.title}</span>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        {session.model && (
+                          <span className="text-xs text-[var(--muted)] font-mono truncate">
+                            {session.parent_id ? '↳ ' : ''}{session.model.split('/').pop()}
+                          </span>
+                        )}
+                        <span className="text-xs text-[var(--muted)]">
+                          {new Date(session.updated_at).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </button>
 
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDeleteSession(session.id);
-                    }}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded hover:bg-[var(--error)]/20 text-[var(--muted)] hover:text-[var(--error)] transition-colors opacity-0 group-hover:opacity-100"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              ))
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDeleteSession(session.id);
+                      }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-lg hover:bg-[var(--error)]/20 text-[var(--muted)] hover:text-[var(--error)] transition-all opacity-0 group-hover:opacity-100"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </div>

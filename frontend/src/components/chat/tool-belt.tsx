@@ -220,8 +220,8 @@ export function ToolBelt({
   };
 
   return (
-    <div className="px-3 py-2 pb-[env(safe-area-inset-bottom,0.5rem)] chat-input-area">
-      <div className="max-w-4xl mx-auto">
+    <div className="px-3 py-2 pb-[env(safe-area-inset-bottom,0.5rem)] bg-[var(--background)]">
+      <div className="max-w-3xl mx-auto">
         {/* Attachments Preview */}
         {attachments.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-3">
@@ -291,7 +291,7 @@ export function ToolBelt({
         )}
 
         {/* Main Input Area */}
-        <div className="relative flex flex-col border border-[var(--border)] rounded-lg bg-[var(--card)]">
+        <div className="relative flex flex-col border border-[var(--border)] rounded-xl bg-[var(--card)] shadow-sm">
           {/* Textarea */}
           <textarea
             ref={textareaRef}
@@ -301,13 +301,13 @@ export function ToolBelt({
             placeholder={disabled ? 'No model running' : placeholder}
             disabled={disabled || isLoading}
             rows={1}
-            className="w-full px-3 py-2.5 bg-transparent text-base md:text-sm resize-none focus:outline-none disabled:opacity-50 placeholder:text-[var(--muted)]"
-            style={{ minHeight: '44px', maxHeight: '150px', fontSize: '16px' }}
+            className="w-full px-4 py-3 bg-transparent text-base md:text-sm resize-none focus:outline-none disabled:opacity-50 placeholder:text-[var(--muted)]"
+            style={{ minHeight: '48px', maxHeight: '200px', fontSize: '16px' }}
           />
 
           {/* Tool Bar */}
-          <div className="flex items-center justify-between px-2 py-1 border-t border-[var(--border)]">
-            <div className="flex items-center">
+          <div className="flex items-center justify-between px-2 py-1.5 border-t border-[var(--border)]">
+            <div className="flex items-center gap-0.5">
               {/* File Upload */}
               <input
                 ref={fileInputRef}
@@ -447,19 +447,19 @@ export function ToolBelt({
               {isLoading ? (
                 <button
                   onClick={onStop}
-                  className="p-2 md:p-1.5 rounded bg-[var(--error)] text-white hover:opacity-90 transition-opacity"
+                  className="p-2.5 md:p-2 rounded-lg bg-[var(--error)] text-white hover:opacity-90 transition-all active:scale-95"
                   title="Stop"
                 >
-                  <StopCircle className="h-4 w-4 md:h-3.5 md:w-3.5" />
+                  <StopCircle className="h-4 w-4" />
                 </button>
               ) : (
                 <button
                   onClick={handleSubmit}
                   disabled={(!value.trim() && attachments.length === 0) || disabled}
-                  className="p-2 md:p-1.5 rounded bg-[var(--foreground)] text-[var(--background)] hover:opacity-90 transition-opacity disabled:opacity-30"
+                  className="p-2.5 md:p-2 rounded-lg bg-[var(--foreground)] text-[var(--background)] hover:opacity-90 transition-all active:scale-95 disabled:opacity-30 disabled:active:scale-100"
                   title="Send"
                 >
-                  <Send className="h-4 w-4 md:h-3.5 md:w-3.5" />
+                  <Send className="h-4 w-4" />
                 </button>
               )}
             </div>
