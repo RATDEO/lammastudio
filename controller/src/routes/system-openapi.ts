@@ -35,18 +35,16 @@ export const registerSystemRoutes = (app: OpenAPIHono, context: AppContext): voi
     async (ctx) => {
       const current = await context.processManager.findInferenceProcess(context.config.inference_port);
       let inferenceReady = false;
-      if (current) {
-        try {
-          const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 5000);
-          const response = await fetch(`http://${context.config.inference_host}:${context.config.inference_port}/health`, {
-            signal: controller.signal,
-          });
-          clearTimeout(timeout);
-          inferenceReady = response.status === 200;
-        } catch {
-          inferenceReady = false;
-        }
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000);
+        const response = await fetch(`http://${context.config.inference_host}:${context.config.inference_port}/health`, {
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+        inferenceReady = response.status === 200;
+      } catch {
+        inferenceReady = false;
       }
 
       return ctx.json({

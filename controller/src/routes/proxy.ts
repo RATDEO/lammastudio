@@ -241,15 +241,27 @@ IMPORTANT: Do not use emoji, Unicode symbols, or decorative box-drawing characte
       }
     }
 
+    const litellmBase = process.env["LITELLM_URL"] ?? process.env["LITELLM_BASE_URL"];
+    const useLiteLLM = Boolean(litellmBase);
     const masterKey = process.env["LITELLM_MASTER_KEY"] ?? "sk-master";
+    const inferenceApiKey = context.config.inference_api_key || process.env["INFERENCE_API_KEY"];
+    const incomingAuth = ctx.req.header("authorization");
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${masterKey}`,
     };
-    const litellmUrl = "http://localhost:4100/v1/chat/completions";
+    if (useLiteLLM) {
+      headers.Authorization = `Bearer ${masterKey}`;
+    } else if (inferenceApiKey) {
+      headers.Authorization = `Bearer ${inferenceApiKey}`;
+    } else if (incomingAuth) {
+      headers.Authorization = incomingAuth;
+    }
+    const targetUrl = useLiteLLM
+      ? `${litellmBase}/v1/chat/completions`
+      : `http://${context.config.inference_host}:${context.config.inference_port}/v1/chat/completions`;
 
     if (!isStreaming) {
-      const response = await fetch(litellmUrl, { method: "POST", headers, body: finalBody });
+      const response = await fetch(targetUrl, { method: "POST", headers, body: finalBody });
       const result = (await response.json()) as Record<string, unknown>;
 
       // Track token usage to lifetime metrics
@@ -298,7 +310,7 @@ IMPORTANT: Do not use emoji, Unicode symbols, or decorative box-drawing characte
       return ctx.json(result, { status: response.status });
     }
 
-    const litellmResponse = await fetch(litellmUrl, { method: "POST", headers, body: finalBody });
+    const litellmResponse = await fetch(targetUrl, { method: "POST", headers, body: finalBody });
     if (!litellmResponse.ok) {
       const errorText = await litellmResponse.text();
       return new Response(errorText, {

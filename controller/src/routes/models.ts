@@ -65,6 +65,36 @@ export const registerModelsRoutes = (app: Hono, context: AppContext): void => {
     }
 
     const payload: OpenAIModelList = { object: "list", data: models };
+    if (payload.data.length === 0) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000);
+        const response = await fetch(`http://${context.config.inference_host}:${context.config.inference_port}/v1/models`, {
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+        if (response.ok) {
+          const data = (await response.json()) as { object?: string; data?: OpenAIModelInfo[]; models?: Array<{ model?: string; name?: string }> };
+          if (Array.isArray(data.data) && data.data.length > 0) {
+            return ctx.json({ object: "list", data: data.data });
+          }
+          if (Array.isArray(data.models) && data.models.length > 0) {
+            const mapped = data.models
+              .map((entry) => entry.model ?? entry.name)
+              .filter(Boolean)
+              .map((id) => ({
+                id: String(id),
+                object: "model" as const,
+                created: now,
+                owned_by: "llamacpp",
+              }));
+            return ctx.json({ object: "list", data: mapped });
+          }
+        }
+      } catch {
+        return ctx.json(payload);
+      }
+    }
     return ctx.json(payload);
   });
 
@@ -194,6 +224,51 @@ export const registerModelsRoutes = (app: Hono, context: AppContext): void => {
       const info = await buildModelInfo(directory, recipeIds);
       models.push(info);
     }
+    if (models.length === 0) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000);
+        const response = await fetch(`http://${context.config.inference_host}:${context.config.inference_port}/v1/models`, {
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+        if (response.ok) {
+          const data = (await response.json()) as {
+            data?: Array<{ id?: string; meta?: { size?: number; n_ctx_train?: number } }>;
+            models?: Array<{ model?: string; name?: string }>;
+          };
+          const remote = Array.isArray(data.data)
+            ? data.data
+                .map((entry) => {
+                  if (!entry?.id) return null;
+                  return {
+                    path: entry.id,
+                    name: entry.id,
+                    size_bytes: entry.meta?.size,
+                    context_length: entry.meta?.n_ctx_train,
+                    has_recipe: false,
+                  };
+                })
+                .filter(Boolean)
+            : Array.isArray(data.models)
+              ? data.models
+                  .map((entry) => entry.model ?? entry.name)
+                  .filter(Boolean)
+                  .map((id) => ({
+                    path: String(id),
+                    name: String(id),
+                    has_recipe: false,
+                  }))
+              : [];
+          for (const entry of remote) {
+            models.push(entry);
+          }
+        }
+      } catch {
+        // ignore fallback errors
+      }
+    }
+
     models.sort((left, right) => String(left.name).toLowerCase().localeCompare(String(right.name).toLowerCase()));
 
     const rootsPayload = roots.map((root) => ({

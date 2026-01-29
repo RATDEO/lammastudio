@@ -13,6 +13,7 @@ export interface Config {
   api_key?: string;
   inference_host: string;
   inference_port: number;
+  inference_api_key?: string;
   data_dir: string;
   db_path: string;
   models_dir: string;
@@ -61,6 +62,7 @@ export const createConfig = (): Config => {
     VLLM_STUDIO_API_KEY: z.string().optional(),
     VLLM_STUDIO_INFERENCE_HOST: z.string().default("localhost"),
     VLLM_STUDIO_INFERENCE_PORT: z.coerce.number().int().positive().default(8000),
+    VLLM_STUDIO_INFERENCE_API_KEY: z.string().optional(),
     VLLM_STUDIO_DATA_DIR: z.string().default(defaultDataDirectory),
     VLLM_STUDIO_DB_PATH: z.string().default(defaultDatabasePath),
     VLLM_STUDIO_MODELS_DIR: z.string().default("/models"),
@@ -83,6 +85,9 @@ export const createConfig = (): Config => {
 
   if (parsed.VLLM_STUDIO_API_KEY) {
     config.api_key = parsed.VLLM_STUDIO_API_KEY;
+  }
+  if (parsed.VLLM_STUDIO_INFERENCE_API_KEY) {
+    config.inference_api_key = parsed.VLLM_STUDIO_INFERENCE_API_KEY;
   }
   if (parsed.VLLM_STUDIO_SGLANG_PYTHON) {
     config.sglang_python = parsed.VLLM_STUDIO_SGLANG_PYTHON;
