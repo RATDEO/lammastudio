@@ -312,3 +312,127 @@ export const buildSglangCommand = (recipe: Recipe, config: Config): string[] => 
 
   return appendExtraArguments(command, recipe.extra_args);
 };
+
+/**
+ * Append llama.cpp-specific extra arguments to a command.
+ * @param command - Command array.
+ * @param extraArguments - Extra args object.
+ * @returns Updated command array.
+ */
+const appendLlamaCppExtraArguments = (
+  command: string[],
+  extraArguments: Record<string, unknown>
+): string[] => {
+  // Keys already handled by buildLlamaCppCommand
+  const handledKeys = new Set([
+    "llama_server_path", "n_gpu_layers", "ngl", "batch_size", "n_batch",
+    "flash_attn", "env_vars", "cuda_visible_devices", "description", "tags", "status",
+    "venv_path", "tensor_split",
+  ]);
+
+  for (const [key, value] of Object.entries(extraArguments)) {
+    const normalizedKey = key.replace(/-/g, "_").toLowerCase();
+    if (handledKeys.has(normalizedKey)) {
+      continue;
+    }
+
+    const flag = `--${key.replace(/_/g, "-")}`;
+    if (command.includes(flag)) {
+      continue;
+    }
+
+    if (value === true) {
+      command.push(flag);
+    } else if (value === false || value === undefined || value === null) {
+      continue;
+    } else if (Array.isArray(value)) {
+      command.push(flag, value.join(","));
+    } else {
+      command.push(flag, String(value));
+    }
+  }
+
+  return command;
+};
+
+/**
+ * Build a llama.cpp server launch command.
+ * @param recipe - Recipe data.
+ * @returns CLI command array.
+ */
+export const buildLlamaCppCommand = (recipe: Recipe): string[] => {
+  // Resolve llama-server binary
+  const llamaServerPath = getExtraArgument(recipe.extra_args, "llama_server_path");
+  let llamaServer: string;
+
+  if (typeof llamaServerPath === "string") {
+    llamaServer = llamaServerPath;
+  } else {
+    const envPath = process.env["LLAMA_SERVER_PATH"];
+    if (envPath) {
+      llamaServer = envPath;
+    } else {
+      const resolved = resolveBinary("llama-server");
+      llamaServer = resolved ?? "llama-server";
+    }
+  }
+
+  const command: string[] = [llamaServer];
+
+  // Model path (GGUF file)
+  command.push("-m", recipe.model_path);
+
+  // Host and port
+  command.push("--host", recipe.host, "--port", String(recipe.port));
+
+  // Context size (maps from max_model_len)
+  command.push("-c", String(recipe.max_model_len));
+
+  // GPU layers (use extra_args.n_gpu_layers or default to full GPU offload)
+  const nGpuLayersValue = getExtraArgument(recipe.extra_args, "n_gpu_layers")
+    ?? getExtraArgument(recipe.extra_args, "ngl");
+  const nGpuLayers = nGpuLayersValue !== undefined ? Number(nGpuLayersValue) : 99;
+  command.push("-ngl", String(nGpuLayers));
+
+  // Parallel slots (maps from max_num_seqs)
+  if (recipe.max_num_seqs > 0) {
+    command.push("-np", String(recipe.max_num_seqs));
+  }
+
+  // Continuous batching (always enable for production)
+  command.push("--cont-batching");
+
+  // Metrics endpoint (for health checks and monitoring)
+  command.push("--metrics");
+
+  // Multi-GPU support via tensor_parallel_size
+  if (recipe.tensor_parallel_size > 1) {
+    command.push("--split-mode", "layer");
+    // Check for custom tensor-split ratios
+    const tensorSplit = getExtraArgument(recipe.extra_args, "tensor_split");
+    if (tensorSplit) {
+      command.push("--tensor-split", String(tensorSplit));
+    }
+  }
+
+  // Batch size (optional, default is usually fine)
+  const batchSize = getExtraArgument(recipe.extra_args, "batch_size")
+    ?? getExtraArgument(recipe.extra_args, "n_batch");
+  if (batchSize !== undefined) {
+    command.push("-b", String(batchSize));
+  }
+
+  // Flash attention (if requested)
+  const flashAttn = getExtraArgument(recipe.extra_args, "flash_attn");
+  if (flashAttn === true) {
+    command.push("--flash-attn");
+  }
+
+  // Alias for served model name (used in API responses)
+  if (recipe.served_model_name) {
+    command.push("--alias", recipe.served_model_name);
+  }
+
+  // Append any additional extra_args
+  return appendLlamaCppExtraArguments(command, recipe.extra_args);
+};

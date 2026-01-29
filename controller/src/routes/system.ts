@@ -45,7 +45,7 @@ export const registerSystemRoutes = (app: Hono, context: AppContext): void => {
       try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 5000);
-        const response = await fetch(`http://localhost:${context.config.inference_port}/health`, {
+        const response = await fetch(`http://${context.config.inference_host}:${context.config.inference_port}/health`, {
           signal: controller.signal,
         });
         clearTimeout(timeout);
@@ -100,7 +100,7 @@ export const registerSystemRoutes = (app: Hono, context: AppContext): void => {
       if (current) {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 2000);
-        const response = await fetch(`http://localhost:${context.config.inference_port}/health`, {
+        const response = await fetch(`http://${context.config.inference_host}:${context.config.inference_port}/health`, {
           signal: controller.signal,
         });
         clearTimeout(timeout);

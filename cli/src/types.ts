@@ -31,6 +31,7 @@ export interface Status {
 
 export interface Config {
   port: number;
+  inference_host: string;
   inference_port: number;
   models_dir: string;
   data_dir: string;

@@ -100,7 +100,7 @@ VLLM_STUDIO_INFERENCE_PORT=8000 # vLLM/SGLang port
 VLLM_STUDIO_API_KEY=your-key    # Optional auth
 ```
 
-### Recipe Example
+### Recipe Example (vLLM)
 
 ```json
 {
@@ -115,27 +115,53 @@ VLLM_STUDIO_API_KEY=your-key    # Optional auth
 }
 ```
 
+### Recipe Example (llama.cpp)
+
+```json
+{
+  "id": "llama3-8b-q4",
+  "name": "Llama 3 8B Q4_K_M",
+  "model_path": "/models/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf",
+  "backend": "llamacpp",
+  "max_model_len": 8192,
+  "max_num_seqs": 4,
+  "extra_args": {
+    "n_gpu_layers": 99,
+    "flash_attn": true
+  }
+}
+```
+
 ### All Recipe Fields
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `id` | string | Unique identifier |
 | `name` | string | Display name |
-| `model_path` | string | Path to model weights |
-| `backend` | string | `vllm` or `sglang` |
+| `model_path` | string | Path to model weights (GGUF for llama.cpp) |
+| `backend` | string | `vllm`, `sglang`, or `llamacpp` |
 | `tensor_parallel_size` | int | GPU parallelism |
 | `pipeline_parallel_size` | int | Pipeline parallelism |
 | `max_model_len` | int | Max context length |
-| `gpu_memory_utilization` | float | VRAM usage (0-1) |
+| `gpu_memory_utilization` | float | VRAM usage (0-1, vLLM only) |
 | `kv_cache_dtype` | string | KV cache type |
-| `quantization` | string | Quantization method |
+| `quantization` | string | Quantization method (vLLM only) |
 | `dtype` | string | Model dtype |
 | `served_model_name` | string | Name exposed via API |
 | `tool_call_parser` | string | Tool calling parser |
 | `reasoning_parser` | string | Reasoning/thinking parser (auto-detected for GLM, MiniMax) |
 | `enable_auto_tool_choice` | bool | Enable automatic tool selection |
 | `trust_remote_code` | bool | Allow remote code |
-| `extra_args` | object | Additional CLI args |
+| `extra_args` | object | Additional CLI args (see below) |
+
+### llama.cpp Extra Args
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `n_gpu_layers` | int | Number of layers to offload to GPU (default: 99 for full offload) |
+| `flash_attn` | bool | Enable flash attention |
+| `n_batch` | int | Batch size for prompt processing |
+| `llama_server_path` | string | Custom path to llama-server binary |
 
 ## Directory Structure
 

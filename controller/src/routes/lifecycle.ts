@@ -183,6 +183,7 @@ export const registerLifecycleRoutes = (app: Hono, context: AppContext): void =>
       let ready = false;
       let fatalError: string | null = null;
       const fatalPatterns = [
+        // vLLM/PyTorch patterns
         "raise ValueError",
         "raise RuntimeError",
         "CUDA out of memory",
@@ -192,6 +193,15 @@ export const registerLifecycleRoutes = (app: Hono, context: AppContext): void =>
         "Cannot allocate",
         "larger than the available KV cache memory",
         "EngineCore failed to start",
+        // llama.cpp patterns
+        "failed to load model",
+        "error loading model",
+        "GGML_ASSERT",
+        "ggml_cuda_error",
+        "not enough VRAM",
+        "failed to allocate",
+        "model file not found",
+        "invalid model file",
       ];
 
       const logFilePath = join("/tmp", `vllm_${recipeId}.log`);
@@ -225,7 +235,7 @@ export const registerLifecycleRoutes = (app: Hono, context: AppContext): void =>
         try {
           const controller = new AbortController();
           const timeoutHandle = setTimeout(() => controller.abort(), 5000);
-          const response = await fetch(`http://localhost:${context.config.inference_port}/health`, {
+          const response = await fetch(`http://${context.config.inference_host}:${context.config.inference_port}/health`, {
             signal: controller.signal,
           });
           clearTimeout(timeoutHandle);
@@ -328,7 +338,7 @@ export const registerLifecycleRoutes = (app: Hono, context: AppContext): void =>
       try {
         const controller = new AbortController();
         const timeoutHandle = setTimeout(() => controller.abort(), 5000);
-        const response = await fetch(`http://localhost:${context.config.inference_port}/health`, {
+        const response = await fetch(`http://${context.config.inference_host}:${context.config.inference_port}/health`, {
           signal: controller.signal,
         });
         clearTimeout(timeoutHandle);

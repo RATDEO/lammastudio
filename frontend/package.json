@@ -24,6 +24,7 @@
     "@ai-sdk/react": "^3.0.43",
     "@types/react-syntax-highlighter": "^15.5.13",
     "ai": "^6.0.41",
+    "bun": "^1.3.7",
     "framer-motion": "^12.24.10",
     "lucide-react": "^0.561.0",
     "markdown-it": "^14.1.0",

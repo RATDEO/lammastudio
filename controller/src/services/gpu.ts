@@ -141,3 +141,65 @@ export const canFitModel = (
   }
   return true;
 };
+
+/**
+ * Estimate VRAM needed for a GGUF model in GB.
+ * GGUF files are pre-quantized, so estimation is based on file size and layer offloading.
+ * @param ggufSizeGb - GGUF file size in GB.
+ * @param contextSize - Desired context size (default 4096).
+ * @param nGpuLayers - Number of layers to offload to GPU.
+ * @param totalLayers - Total layers in model (estimate 32 if unknown).
+ * @returns Estimated VRAM needed per GPU in GB.
+ */
+export const estimateGgufMemory = (
+  ggufSizeGb: number,
+  contextSize: number = 4096,
+  nGpuLayers: number = 99,
+  totalLayers: number = 32,
+): number => {
+  // Base model memory is proportional to GPU layers offloaded
+  const effectiveLayers = Math.min(nGpuLayers, totalLayers);
+  const layerRatio = effectiveLayers / totalLayers;
+  let memoryGb = ggufSizeGb * layerRatio;
+
+  // Context memory overhead (rough estimate: ~1MB per 1K context for 7B model)
+  // Scale with model size and context
+  const contextOverhead = (contextSize / 1000) * (ggufSizeGb / 4) * 0.001;
+  memoryGb += contextOverhead;
+
+  // Add 20% overhead for KV cache and other buffers
+  memoryGb *= 1.2;
+
+  return memoryGb;
+};
+
+/**
+ * Check if a GGUF model can fit on available GPUs.
+ * @param ggufSizeGb - GGUF file size in GB.
+ * @param contextSize - Desired context size.
+ * @param nGpuLayers - Number of layers to offload.
+ * @param totalLayers - Total layers in model.
+ * @returns True if the model can fit on GPUs.
+ */
+export const canFitGgufModel = (
+  ggufSizeGb: number,
+  contextSize: number = 4096,
+  nGpuLayers: number = 99,
+  totalLayers: number = 32,
+): boolean => {
+  const gpus = getGpuInfo();
+  if (gpus.length === 0) {
+    // No GPU info available (might be on CPU or unsupported platform)
+    return true;
+  }
+  const requiredGb = estimateGgufMemory(ggufSizeGb, contextSize, nGpuLayers, totalLayers);
+  const requiredBytes = requiredGb * 1024 ** 3;
+
+  // Check if any GPU has enough free memory
+  for (const gpu of gpus) {
+    if (gpu.memory_free >= requiredBytes) {
+      return true;
+    }
+  }
+  return false;
+};

@@ -12,7 +12,7 @@ import { delay } from "../core/async";
 import type { Logger } from "../core/logger";
 import type { LaunchResult, ProcessInfo, Recipe } from "../types/models";
 import type { EventManager } from "./event-manager";
-import { buildSglangCommand, buildVllmCommand } from "./backends";
+import { buildSglangCommand, buildVllmCommand, buildLlamaCppCommand } from "./backends";
 import {
     buildEnvironment,
     collectChildren,
@@ -211,7 +211,9 @@ export const createProcessManager = (
         const command =
             updatedRecipe.backend === "sglang"
                 ? buildSglangCommand(updatedRecipe, config)
-                : buildVllmCommand(updatedRecipe);
+                : updatedRecipe.backend === "llamacpp"
+                    ? buildLlamaCppCommand(updatedRecipe)
+                    : buildVllmCommand(updatedRecipe);
 
         const logFile = resolve("/tmp", `vllm_${updatedRecipe.id}.log`);
         const env = buildEnvironment(updatedRecipe);
@@ -262,7 +264,7 @@ export const createProcessManager = (
                     if (eventManager) {
                         eventManager
                             .publishLogLine(updatedRecipe.id, line)
-                            .catch(() => {});
+                            .catch(() => { });
                     }
                 });
             }
@@ -280,7 +282,7 @@ export const createProcessManager = (
                     if (eventManager) {
                         eventManager
                             .publishLogLine(updatedRecipe.id, line)
-                            .catch(() => {});
+                            .catch(() => { });
                     }
                 });
             }

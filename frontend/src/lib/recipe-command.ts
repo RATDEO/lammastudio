@@ -18,21 +18,84 @@ export function slugifyRecipeId(input: string): string {
 export function recipeToCommand(recipe: Recipe): string {
   const lines: string[] = [];
 
-  const tp = recipe.tp || recipe.tensor_parallel_size || 1;
-  const pp = recipe.pp || recipe.pipeline_parallel_size || 1;
-  const totalGpus = tp * pp;
-  if (totalGpus > 1) {
-    const gpuIds = Array.from({ length: totalGpus }, (_, i) => i).join(",");
-    lines.push(`CUDA_VISIBLE_DEVICES=${gpuIds} \\`);
+  const backend = recipe.backend || "vllm";
+
+  // For llama.cpp, we don't need CUDA_VISIBLE_DEVICES in the same way
+  if (backend !== "llamacpp") {
+    const tp = recipe.tp || recipe.tensor_parallel_size || 1;
+    const pp = recipe.pp || recipe.pipeline_parallel_size || 1;
+    const totalGpus = tp * pp;
+    if (totalGpus > 1) {
+      const gpuIds = Array.from({ length: totalGpus }, (_, i) => i).join(",");
+      lines.push(`CUDA_VISIBLE_DEVICES=${gpuIds} \\`);
+    }
   }
 
-  const backend = recipe.backend || "vllm";
-  if (backend === "sglang") {
+  if (backend === "llamacpp") {
+    // llama.cpp command generation
+    const serverPath = (recipe.extra_args?.llama_server_path as string) || "llama-server";
+    lines.push(`${serverPath} \\`);
+    lines.push(`  -m ${recipe.model_path} \\`);
+
+    // Context size
+    if (recipe.max_model_len) {
+      lines.push(`  -c ${recipe.max_model_len} \\`);
+    }
+
+    // GPU layers (default to full offload)
+    const nGpuLayers = (recipe.extra_args?.n_gpu_layers as number) ??
+      (recipe.extra_args?.ngl as number) ?? 99;
+    lines.push(`  -ngl ${nGpuLayers} \\`);
+
+    // Parallel slots
+    if (recipe.max_num_seqs && recipe.max_num_seqs > 0) {
+      lines.push(`  -np ${recipe.max_num_seqs} \\`);
+    }
+
+    // Batch size
+    const batchSize = (recipe.extra_args?.n_batch as number) ??
+      (recipe.extra_args?.batch_size as number);
+    if (batchSize) {
+      lines.push(`  -b ${batchSize} \\`);
+    }
+
+    // Flash attention
+    if (recipe.extra_args?.flash_attn) {
+      lines.push(`  --flash-attn \\`);
+    }
+
+    // Multi-GPU support
+    const tp = recipe.tp || recipe.tensor_parallel_size || 1;
+    if (tp > 1) {
+      lines.push(`  --split-mode layer \\`);
+    }
+
+    // Continuous batching and metrics (recommended)
+    lines.push(`  --cont-batching \\`);
+    lines.push(`  --metrics \\`);
+
+    // Alias for model name
+    if (recipe.served_model_name) {
+      lines.push(`  --alias ${recipe.served_model_name} \\`);
+    }
+
+    lines.push(`  --host ${recipe.host || "0.0.0.0"} \\`);
+    lines.push(`  --port ${recipe.port || 8000}`);
+  } else if (backend === "sglang") {
     lines.push(`python -m sglang.launch_server \\`);
     lines.push(`  --model-path ${recipe.model_path} \\`);
+    addVllmSglangArgs(lines, recipe);
   } else {
     lines.push(`vllm serve ${recipe.model_path} \\`);
+    addVllmSglangArgs(lines, recipe);
   }
+
+  return lines.join("\n");
+}
+
+function addVllmSglangArgs(lines: string[], recipe: Recipe): void {
+  const tp = recipe.tp || recipe.tensor_parallel_size || 1;
+  const pp = recipe.pp || recipe.pipeline_parallel_size || 1;
 
   const args: [string, string | number | boolean | undefined][] = [
     ["--tensor-parallel-size", tp],
@@ -55,8 +118,8 @@ export function recipeToCommand(recipe: Recipe): string {
     [
       "--reasoning-parser",
       (recipe.reasoning_parser ?? (recipe.extra_args?.reasoning_parser as string | undefined)) as
-        | string
-        | undefined,
+      | string
+      | undefined,
     ],
     ["--tool-call-parser", recipe.tool_call_parser],
     ["--served-model-name", recipe.served_model_name],
@@ -83,8 +146,6 @@ export function recipeToCommand(recipe: Recipe): string {
 
   lines.push(`  --host ${recipe.host || "0.0.0.0"} \\`);
   lines.push(`  --port ${recipe.port || 8000}`);
-
-  return lines.join("\n");
 }
 
 export function parseCommand(command: string, existingRecipe?: Partial<Recipe>): Recipe {
@@ -100,13 +161,53 @@ export function parseCommand(command: string, existingRecipe?: Partial<Recipe>):
     .replace(/\\\s*\n/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-  if (normalizedCmd.includes("sglang")) recipe.backend = "sglang";
 
-  const modelMatch = normalizedCmd.match(/(?:vllm serve|--model-path|--model)\s+(\/[^\s]+)/);
-  if (modelMatch) recipe.model_path = modelMatch[1];
+  // Detect backend
+  if (normalizedCmd.includes("llama-server") || normalizedCmd.includes("llama_server")) {
+    recipe.backend = "llamacpp";
+  } else if (normalizedCmd.includes("sglang")) {
+    recipe.backend = "sglang";
+  }
+
+  // Parse model path based on backend
+  if (recipe.backend === "llamacpp") {
+    // llama.cpp uses -m for model path
+    const modelMatch = normalizedCmd.match(/-m\s+([^\s]+)/);
+    if (modelMatch) recipe.model_path = modelMatch[1];
+  } else {
+    const modelMatch = normalizedCmd.match(/(?:vllm serve|--model-path|--model)\s+(\/[^\s]+)/);
+    if (modelMatch) recipe.model_path = modelMatch[1];
+  }
 
   const cudaMatch = normalizedCmd.match(/CUDA_VISIBLE_DEVICES=([\d,]+)/);
   if (cudaMatch) recipe.extra_args!.cuda_visible_devices = cudaMatch[1];
+
+  // Parse llama.cpp short flags first (before the double-dash pattern)
+  if (recipe.backend === "llamacpp") {
+    // Context size: -c <value>
+    const ctxMatch = normalizedCmd.match(/(?:^|\s)-c\s+(\d+)/);
+    if (ctxMatch) recipe.max_model_len = parseInt(ctxMatch[1]) || undefined;
+
+    // GPU layers: -ngl <value>
+    const nglMatch = normalizedCmd.match(/(?:^|\s)-ngl\s+(\d+)/);
+    if (nglMatch) recipe.extra_args!.n_gpu_layers = parseInt(nglMatch[1]);
+
+    // Parallel slots: -np <value>
+    const npMatch = normalizedCmd.match(/(?:^|\s)-np\s+(\d+)/);
+    if (npMatch) recipe.max_num_seqs = parseInt(npMatch[1]) || undefined;
+
+    // Batch size: -b <value>
+    const batchMatch = normalizedCmd.match(/(?:^|\s)-b\s+(\d+)/);
+    if (batchMatch) recipe.extra_args!.n_batch = parseInt(batchMatch[1]);
+
+    // Port: --port <value> (also check short form if any)
+    const portMatch = normalizedCmd.match(/--port\s+(\d+)/);
+    if (portMatch) recipe.port = parseInt(portMatch[1]) || 8000;
+
+    // Host: --host <value>
+    const hostMatch = normalizedCmd.match(/--host\s+([\w.-]+)/);
+    if (hostMatch) recipe.host = hostMatch[1];
+  }
 
   const flagPattern = /--([\w-]+)(?:\s+([^\s-][^\s]*))?/g;
   let match: RegExpExecArray | null;
@@ -178,6 +279,26 @@ export function parseCommand(command: string, existingRecipe?: Partial<Recipe>):
         break;
       case "enable-expert-parallel":
         recipe.enable_expert_parallel = true;
+        break;
+      // llama.cpp specific flags
+      case "alias":
+        recipe.served_model_name = value;
+        break;
+      case "flash-attn":
+        recipe.extra_args!.flash_attn = true;
+        break;
+      case "cont-batching":
+        // Always enabled, no need to store
+        break;
+      case "metrics":
+        // Always enabled, no need to store
+        break;
+      case "split-mode":
+        // Multi-GPU mode, implies tensor parallel
+        if (value === "layer") {
+          recipe.tp = recipe.tp || 2;
+          recipe.tensor_parallel_size = recipe.tp;
+        }
         break;
     }
   }

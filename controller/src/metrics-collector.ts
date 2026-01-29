@@ -15,14 +15,15 @@ export const startMetricsCollector = (context: AppContext): (() => void) => {
 
   /**
    * Scrape Prometheus metrics from vLLM.
+   * @param host - Inference host.
    * @param port - Inference port.
    * @returns Metrics map.
    */
-  const scrapeVllmMetrics = async (port: number): Promise<Record<string, number>> => {
+  const scrapeVllmMetrics = async (host: string, port: number): Promise<Record<string, number>> => {
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 5000);
-      const response = await fetch(`http://localhost:${port}/metrics`, { signal: controller.signal });
+      const response = await fetch(`http://${host}:${port}/metrics`, { signal: controller.signal });
       clearTimeout(timeout);
       if (response.status !== 200) {
         return {};
@@ -97,7 +98,7 @@ export const startMetricsCollector = (context: AppContext): (() => void) => {
       };
 
       if (current) {
-        const vllmMetrics = await scrapeVllmMetrics(context.config.inference_port);
+        const vllmMetrics = await scrapeVllmMetrics(context.config.inference_host, context.config.inference_port);
         const now = Date.now() / 1000;
         const elapsed = lastMetricsTime > 0 ? now - lastMetricsTime : 5;
         let promptThroughput = 0;

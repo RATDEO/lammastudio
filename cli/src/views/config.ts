@@ -17,7 +17,7 @@ export function renderConfig(state: AppState): string {
 
   lines.push(c.bold('  Ports'));
   lines.push(`    Controller: ${c.cyan(cfg.port.toString())}`);
-  lines.push(`    Inference:  ${c.cyan(cfg.inference_port.toString())}`);
+  lines.push(`    Inference:  ${c.cyan(cfg.inference_host + ':' + cfg.inference_port.toString())}`);
   lines.push('');
 
   lines.push(c.bold('  Directories'));

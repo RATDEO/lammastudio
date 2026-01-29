@@ -19,6 +19,7 @@ describe("System Routes", () => {
     const mockConfig: Config = {
       host: "0.0.0.0",
       port: 8080,
+      inference_host: "localhost",
       inference_port: 8000,
       data_dir: "./data",
       db_path: ":memory:",

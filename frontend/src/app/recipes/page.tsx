@@ -667,7 +667,64 @@ function generateCommand(recipe: Recipe): string {
   const backend = recipe.backend || "vllm";
   const args: string[] = [];
 
-  // Base command
+  // Handle llama.cpp backend separately
+  if (backend === "llamacpp") {
+    const serverPath = ((recipe.extra_args as Record<string, unknown>)?.llama_server_path as string) || "llama-server";
+    args.push(serverPath);
+
+    // Model path (required)
+    if (recipe.model_path) {
+      args.push(`-m ${recipe.model_path}`);
+    }
+
+    // Context size
+    if (recipe.max_model_len) {
+      args.push(`-c ${recipe.max_model_len}`);
+    }
+
+    // GPU layers (default to full offload)
+    const nGpuLayers = ((recipe.extra_args as Record<string, unknown>)?.n_gpu_layers as number) ?? 99;
+    args.push(`-ngl ${nGpuLayers}`);
+
+    // Parallel slots
+    if (recipe.max_num_seqs && recipe.max_num_seqs > 0) {
+      args.push(`-np ${recipe.max_num_seqs}`);
+    }
+
+    // Batch size
+    const batchSize = (recipe.extra_args as Record<string, unknown>)?.n_batch as number;
+    if (batchSize) {
+      args.push(`-b ${batchSize}`);
+    }
+
+    // Flash attention
+    if ((recipe.extra_args as Record<string, unknown>)?.flash_attn) {
+      args.push("--flash-attn");
+    }
+
+    // Multi-GPU support
+    const tp = recipe.tp || recipe.tensor_parallel_size || 1;
+    if (tp > 1) {
+      args.push("--split-mode layer");
+    }
+
+    // Continuous batching and metrics (recommended)
+    args.push("--cont-batching");
+    args.push("--metrics");
+
+    // Alias for model name
+    if (recipe.served_model_name) {
+      args.push(`--alias ${recipe.served_model_name}`);
+    }
+
+    // Host and port
+    args.push(`--host ${recipe.host || "0.0.0.0"}`);
+    args.push(`--port ${recipe.port || 8000}`);
+
+    return args.join(" \\\n  ");
+  }
+
+  // Base command for vLLM/SGLang
   if (backend === "vllm") {
     args.push("vllm serve");
   } else {
@@ -903,12 +960,13 @@ function RecipeModal({
               <select
                 value={recipe.backend ?? "vllm"}
                 onChange={(e) =>
-                  onChange({ ...recipe, backend: e.target.value as "vllm" | "sglang" })
+                  onChange({ ...recipe, backend: e.target.value as "vllm" | "sglang" | "llamacpp" })
                 }
                 className="w-full px-3 py-2 bg-[#0d0d0d] border border-[#363432] rounded-lg text-sm focus:outline-none focus:border-[#d97706]"
               >
                 <option value="vllm">vLLM</option>
                 <option value="sglang">SGLang</option>
+                <option value="llamacpp">llama.cpp</option>
               </select>
             </div>
             <div>
@@ -945,6 +1003,57 @@ function RecipeModal({
             </div>
           </div>
 
+          {/* llama.cpp specific fields */}
+          {recipe.backend === "llamacpp" && (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm text-[#9a9088] mb-2">GPU Layers (ngl)</label>
+                <input
+                  type="number"
+                  value={(recipe.extra_args as Record<string, unknown>)?.n_gpu_layers ?? 99}
+                  onChange={(e) => {
+                    const newExtraArgs = { ...(recipe.extra_args || {}) } as Record<string, unknown>;
+                    newExtraArgs.n_gpu_layers = Number(e.target.value) || 99;
+                    onChange({ ...recipe, extra_args: newExtraArgs });
+                  }}
+                  min={0}
+                  className="w-full px-3 py-2 bg-[#0d0d0d] border border-[#363432] rounded-lg text-sm focus:outline-none focus:border-[#d97706]"
+                />
+                <p className="mt-1 text-xs text-[#6a6560]">99 = offload all layers to GPU</p>
+              </div>
+              <div className="flex items-center">
+                <label className="flex items-center gap-2 text-sm text-[#9a9088]">
+                  <input
+                    type="checkbox"
+                    checked={!!(recipe.extra_args as Record<string, unknown>)?.flash_attn}
+                    onChange={(e) => {
+                      const newExtraArgs = { ...(recipe.extra_args || {}) } as Record<string, unknown>;
+                      if (e.target.checked) {
+                        newExtraArgs.flash_attn = true;
+                      } else {
+                        delete newExtraArgs.flash_attn;
+                      }
+                      onChange({ ...recipe, extra_args: newExtraArgs });
+                    }}
+                    className="rounded border-[#363432] bg-[#0d0d0d]"
+                  />
+                  Flash Attention
+                </label>
+              </div>
+            </div>
+          )}
+
+          {/* GGUF warning for llamacpp */}
+          {recipe.backend === "llamacpp" && recipe.model_path && !recipe.model_path.endsWith(".gguf") && (
+            <div className="p-3 bg-[#d97706]/10 border border-[#d97706]/30 rounded-lg">
+              <p className="text-sm text-[#fbbf24]">
+                ⚠️ llama.cpp requires GGUF model files. The selected model path doesn&apos;t end in .gguf
+              </p>
+            </div>
+          )}
+
+          {/* GPU Memory Utilization - hide for llamacpp */}
+          {recipe.backend !== "llamacpp" && (
           <div>
             <label className="block text-sm text-[#9a9088] mb-2">GPU Memory Utilization</label>
             <input
@@ -959,6 +1068,7 @@ function RecipeModal({
               className="w-full px-3 py-2 bg-[#0d0d0d] border border-[#363432] rounded-lg text-sm focus:outline-none focus:border-[#d97706]"
             />
           </div>
+          )}
 
           {/* Advanced section */}
           <div>
@@ -979,17 +1089,21 @@ function RecipeModal({
                     Model Loading
                   </h4>
                   <div>
-                    <label className="block text-sm text-[#9a9088] mb-2">Max Model Length</label>
+                    <label className="block text-sm text-[#9a9088] mb-2">
+                      {recipe.backend === "llamacpp" ? "Context Size" : "Max Model Length"}
+                    </label>
                     <input
                       type="number"
                       value={recipe.max_model_len || ""}
                       onChange={(e) =>
                         onChange({ ...recipe, max_model_len: Number(e.target.value) || undefined })
                       }
-                      placeholder="32768"
+                      placeholder={recipe.backend === "llamacpp" ? "4096" : "32768"}
                       className="w-full px-3 py-2 bg-[#0d0d0d] border border-[#363432] rounded-lg text-sm focus:outline-none focus:border-[#d97706]"
                     />
                   </div>
+                  {/* Quantization & Dtype - hide for llamacpp */}
+                  {recipe.backend !== "llamacpp" && (
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm text-[#9a9088] mb-2">Quantization</label>
@@ -1019,6 +1133,8 @@ function RecipeModal({
                       </select>
                     </div>
                   </div>
+                  )}
+                  {recipe.backend !== "llamacpp" && (
                   <div className="flex flex-wrap gap-4">
                     <label className="flex items-center gap-2 text-sm text-[#9a9088]">
                       <input
@@ -1030,9 +1146,11 @@ function RecipeModal({
                       Trust Remote Code
                     </label>
                   </div>
+                  )}
                 </div>
 
-                {/* Memory & KV Cache */}
+                {/* Memory & KV Cache - hide for llamacpp */}
+                {recipe.backend !== "llamacpp" && (
                 <div className="space-y-4 pt-4 border-t border-[#363432]/50">
                   <h4 className="text-xs uppercase tracking-wider text-[#6a6560] font-medium">
                     Memory & KV Cache
@@ -1093,8 +1211,10 @@ function RecipeModal({
                     </label>
                   </div>
                 </div>
+                )}
 
-                {/* Performance */}
+                {/* Performance - hide for llamacpp */}
+                {recipe.backend !== "llamacpp" && (
                 <div className="space-y-4 pt-4 border-t border-[#363432]/50">
                   <h4 className="text-xs uppercase tracking-wider text-[#6a6560] font-medium">
                     Performance
@@ -1112,8 +1232,10 @@ function RecipeModal({
                     </label>
                   </div>
                 </div>
+                )}
 
-                {/* Tool Calling & Reasoning */}
+                {/* Tool Calling & Reasoning - hide for llamacpp */}
+                {recipe.backend !== "llamacpp" && (
                 <div className="space-y-4 pt-4 border-t border-[#363432]/50">
                   <h4 className="text-xs uppercase tracking-wider text-[#6a6560] font-medium">
                     Tool Calling & Reasoning
@@ -1263,6 +1385,7 @@ function RecipeModal({
                     </div>
                   )}
                 </div>
+                )}
 
                 {/* Chat & Server */}
                 <div className="space-y-4 pt-4 border-t border-[#363432]/50">
@@ -1282,6 +1405,7 @@ function RecipeModal({
                         className="w-full px-3 py-2 bg-[#0d0d0d] border border-[#363432] rounded-lg text-sm focus:outline-none focus:border-[#d97706]"
                       />
                     </div>
+                    {recipe.backend !== "llamacpp" && (
                     <div>
                       <label className="block text-sm text-[#9a9088] mb-2">Chat Template</label>
                       <input
@@ -1294,6 +1418,7 @@ function RecipeModal({
                         className="w-full px-3 py-2 bg-[#0d0d0d] border border-[#363432] rounded-lg text-sm focus:outline-none focus:border-[#d97706]"
                       />
                     </div>
+                    )}
                   </div>
                 </div>
               </div>

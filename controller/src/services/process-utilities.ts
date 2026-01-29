@@ -40,6 +40,10 @@ export const detectBackend = (args: string[]): string | null => {
     return null;
   }
   const joined = args.join(" ");
+  // llama.cpp detection (check first as it's a distinct binary)
+  if (joined.includes("llama-server") || joined.includes("llama_server") || joined.includes("llama.cpp")) {
+    return "llamacpp";
+  }
   if (joined.includes("vllm.entrypoints.openai.api_server")) {
     return "vllm";
   }

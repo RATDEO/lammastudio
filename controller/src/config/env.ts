@@ -11,12 +11,14 @@ export interface Config {
   host: string;
   port: number;
   api_key?: string;
+  inference_host: string;
   inference_port: number;
   data_dir: string;
   db_path: string;
   models_dir: string;
   sglang_python?: string;
   tabby_api_dir?: string;
+  llama_server_path?: string;
 }
 
 /**
@@ -57,12 +59,14 @@ export const createConfig = (): Config => {
     VLLM_STUDIO_HOST: z.string().default("0.0.0.0"),
     VLLM_STUDIO_PORT: z.coerce.number().int().positive().default(8080),
     VLLM_STUDIO_API_KEY: z.string().optional(),
+    VLLM_STUDIO_INFERENCE_HOST: z.string().default("localhost"),
     VLLM_STUDIO_INFERENCE_PORT: z.coerce.number().int().positive().default(8000),
     VLLM_STUDIO_DATA_DIR: z.string().default(defaultDataDirectory),
     VLLM_STUDIO_DB_PATH: z.string().default(defaultDatabasePath),
     VLLM_STUDIO_MODELS_DIR: z.string().default("/models"),
     VLLM_STUDIO_SGLANG_PYTHON: z.string().optional(),
     VLLM_STUDIO_TABBY_API_DIR: z.string().optional(),
+    LLAMA_SERVER_PATH: z.string().optional(),
   });
 
   const parsed = schema.parse(process.env);
@@ -70,6 +74,7 @@ export const createConfig = (): Config => {
   const config: Config = {
     host: parsed.VLLM_STUDIO_HOST,
     port: parsed.VLLM_STUDIO_PORT,
+    inference_host: parsed.VLLM_STUDIO_INFERENCE_HOST,
     inference_port: parsed.VLLM_STUDIO_INFERENCE_PORT,
     data_dir: resolve(parsed.VLLM_STUDIO_DATA_DIR),
     db_path: resolve(parsed.VLLM_STUDIO_DB_PATH),
@@ -84,6 +89,9 @@ export const createConfig = (): Config => {
   }
   if (parsed.VLLM_STUDIO_TABBY_API_DIR) {
     config.tabby_api_dir = parsed.VLLM_STUDIO_TABBY_API_DIR;
+  }
+  if (parsed.LLAMA_SERVER_PATH) {
+    config.llama_server_path = parsed.LLAMA_SERVER_PATH;
   }
 
   return config;
