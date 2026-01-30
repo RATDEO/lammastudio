@@ -205,6 +205,7 @@ export interface ChatSessionDetail extends ChatSession {
 
 // MCP types
 export interface MCPServer {
+  id?: string;
   name: string;
   command: string;
   args?: string[];

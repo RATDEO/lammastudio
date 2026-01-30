@@ -107,23 +107,23 @@ const TOOL_ICONS: Record<string, React.ReactNode> = {
 };
 
 export function ToolCallCard({ toolCall, result, isExecuting, compact = false }: ToolCallCardProps) {
+  // Parse server__toolname format
+  const fullName = toolCall.function.name;
+  const [serverName, ...nameParts] = fullName.split("__");
+  const toolName = nameParts.length > 0 ? nameParts.join("__") : fullName;
+  const displayServer = toolCall.server || (nameParts.length > 0 ? serverName : null);
+
+  const defaultExpanded = ["web_search_exa", "brave_web_search", "search"].includes(toolName);
   const cardState = useAppStore(
     (state) =>
       state.legacyToolCallCardState[toolCall.id] ?? {
-        isExpanded: false,
+        isExpanded: defaultExpanded,
         showModal: false,
         modalCopied: false,
       },
   );
   const setLegacyToolCallCardState = useAppStore((state) => state.setLegacyToolCallCardState);
   const { isExpanded, showModal } = cardState;
-
-  // Parse server__toolname format
-  const fullName = toolCall.function.name;
-  const [serverName, ...nameParts] = fullName.split('__');
-  const toolName = nameParts.length > 0 ? nameParts.join('__') : fullName;
-  const displayServer = toolCall.server || (nameParts.length > 0 ? serverName : null);
-
   let args: Record<string, unknown> = {};
   try {
     args = JSON.parse(toolCall.function.arguments);

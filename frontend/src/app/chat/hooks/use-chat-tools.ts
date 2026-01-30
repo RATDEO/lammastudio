@@ -26,6 +26,7 @@ export function useChatTools({ mcpEnabled }: UseChatToolsOptions) {
     try {
       const { servers } = await api.getMCPServers();
       const normalizedServers: MCPServer[] = servers.map((server: MCPServer) => ({
+        id: server.id ?? server.name,
         name: server.name,
         enabled: server.enabled ?? true,
         icon: server.icon,
@@ -52,7 +53,8 @@ export function useChatTools({ mcpEnabled }: UseChatToolsOptions) {
         const serverTools = await Promise.all(
           enabledServers.map(async (server) => {
             try {
-              const result = await api.getMCPServerTools(server.name);
+              const serverId = server.id ?? server.name;
+              const result = await api.getMCPServerTools(serverId);
               return result.tools;
             } catch (err) {
               console.warn(`[MCP] failed to load tools from ${server.name}`, err);
@@ -77,7 +79,8 @@ export function useChatTools({ mcpEnabled }: UseChatToolsOptions) {
           const serverTools = await Promise.all(
             enabledServers.map(async (server) => {
               try {
-                const result = await api.getMCPServerTools(server.name);
+                const serverId = server.id ?? server.name;
+                const result = await api.getMCPServerTools(serverId);
                 return result.tools;
               } catch (err) {
                 console.warn(`[MCP] failed to load tools from ${server.name}`, err);
@@ -104,7 +107,7 @@ export function useChatTools({ mcpEnabled }: UseChatToolsOptions) {
       const toolsList = toolsOverride ?? mcpTools;
       const enabledServers =
         mcpServers.length > 0
-          ? new Set(mcpServers.filter((server) => server.enabled).map((server) => server.name))
+          ? new Set(mcpServers.filter((server) => server.enabled).map((server) => server.id ?? server.name))
           : new Set<string>();
       const shouldFilter = enabledServers.size > 0;
       const filteredTools = shouldFilter
@@ -184,7 +187,8 @@ export function useChatTools({ mcpEnabled }: UseChatToolsOptions) {
 
   const updateMcpServer = useCallback(
     async (server: MCPServer) => {
-      await api.updateMCPServer(server.name, server);
+      const serverId = server.id ?? server.name;
+      await api.updateMCPServer(serverId, server);
       await loadMCPServers();
     },
     [loadMCPServers],

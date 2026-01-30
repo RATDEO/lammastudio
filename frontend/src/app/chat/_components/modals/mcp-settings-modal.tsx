@@ -37,7 +37,8 @@ export function MCPSettingsModal({
   };
 
   const handleToggleServer = async (server: MCPServer) => {
-    setPendingServer(server.name);
+    const serverId = server.id ?? server.name;
+    setPendingServer(serverId);
     setActionError(null);
     try {
       await onUpdateServer({ ...server, enabled: !server.enabled });
@@ -49,11 +50,12 @@ export function MCPSettingsModal({
   };
 
   const handleRemoveServer = async (server: MCPServer) => {
+    const serverId = server.id ?? server.name;
     if (!window.confirm(`Remove MCP server "${server.name}"?`)) return;
-    setPendingServer(server.name);
+    setPendingServer(serverId);
     setActionError(null);
     try {
-      await onRemoveServer(server.name);
+      await onRemoveServer(serverId);
     } catch (error) {
       setActionError(error instanceof Error ? error.message : "Failed to remove server.");
     } finally {
@@ -113,7 +115,7 @@ export function MCPSettingsModal({
             ) : (
               servers.map((server) => (
                 <div
-                  key={server.name}
+                  key={server.id ?? server.name}
                   className="flex flex-col gap-3 p-3 bg-(--background) border border-(--border) rounded-lg"
                 >
                   <div className="flex items-center justify-between gap-3">
@@ -133,7 +135,7 @@ export function MCPSettingsModal({
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => handleToggleServer(server)}
-                        disabled={pendingServer === server.name}
+                        disabled={pendingServer === (server.id ?? server.name)}
                         className={`px-3 py-1 rounded-full text-xs font-medium transition-colors disabled:opacity-60 ${
                           server.enabled
                             ? "bg-(--success)/20 text-(--success)"

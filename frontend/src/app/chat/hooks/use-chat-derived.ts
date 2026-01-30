@@ -72,6 +72,7 @@ export function useChatDerived({
 
     const lastAssistantId = assistantMessages[assistantMessages.length - 1]?.id;
     const groups: ActivityGroup[] = [];
+    const referencedToolCallIds = new Set<string>();
 
     assistantMessages.forEach((msg, index) => {
       const thinking = extractThinking(msg);
@@ -82,6 +83,7 @@ export function useChatDerived({
 
         const toolCallId = String(part.toolCallId);
         const result = toolResultsMap.get(toolCallId);
+        referencedToolCallIds.add(toolCallId);
         const isExecuting = executingTools.has(toolCallId);
 
         const rawToolName =
@@ -131,6 +133,45 @@ export function useChatDerived({
       });
     });
 
+    const orphanToolItems: ActivityItem[] = [];
+    const inferToolName = (id: string) => {
+      const prefix = id.split(":")[0];
+      if (prefix.includes("__")) return prefix.split("__").slice(1).join("__");
+      return prefix || "tool";
+    };
+    toolResultsMap.forEach((result, id) => {
+      if (referencedToolCallIds.has(id)) return;
+      orphanToolItems.push({
+        id: `activity-orphan-${id}`,
+        type: "tool-call",
+        timestamp: Date.now(),
+        toolName: inferToolName(id),
+        toolCallId: id,
+        state: result.isError ? "error" : "complete",
+        output: result.content,
+      });
+    });
+    executingTools.forEach((id) => {
+      if (referencedToolCallIds.has(id)) return;
+      if (orphanToolItems.find((item) => item.toolCallId === id)) return;
+      orphanToolItems.push({
+        id: `activity-orphan-${id}`,
+        type: "tool-call",
+        timestamp: Date.now(),
+        toolName: inferToolName(id),
+        toolCallId: id,
+        state: "running",
+      });
+    });
+    if (orphanToolItems.length > 0) {
+      groups.push({
+        id: "activity-group-tools",
+        messageId: "manual-tools",
+        title: "Tools",
+        isLatest: false,
+        toolItems: orphanToolItems,
+      });
+    }
     return groups.reverse();
   }, [messages, extractThinking, executingTools, toolResultsMap, isLoading]);
 

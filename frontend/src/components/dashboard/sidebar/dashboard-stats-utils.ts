@@ -1,4 +1,4 @@
-export const ELECTRICITY_PRICE_PLN = 1.2;
+export const ELECTRICITY_PRICE_GBP = 0.25;
 
 export function formatNumber(num: number): string {
   if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`;

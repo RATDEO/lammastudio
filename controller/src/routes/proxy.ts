@@ -233,16 +233,15 @@ IMPORTANT: Do not use emoji, Unicode symbols, or decorative box-drawing characte
 
     // Use modified body if we injected the prompt
     const finalBody = modifiedBody ?? bodyBuffer;
+    const litellmBase = process.env["LITELLM_URL"] ?? process.env["LITELLM_BASE_URL"];
+    const useLiteLLM = Boolean(litellmBase);
 
-    if (requestedModel) {
+    if (requestedModel && !useLiteLLM) {
       const switchError = await ensureModelRunning(requestedModel);
       if (switchError) {
         throw serviceUnavailable(switchError);
       }
     }
-
-    const litellmBase = process.env["LITELLM_URL"] ?? process.env["LITELLM_BASE_URL"];
-    const useLiteLLM = Boolean(litellmBase);
     const masterKey = process.env["LITELLM_MASTER_KEY"] ?? "sk-master";
     const inferenceApiKey = context.config.inference_api_key || process.env["INFERENCE_API_KEY"];
     const incomingAuth = ctx.req.header("authorization");

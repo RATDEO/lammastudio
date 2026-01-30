@@ -16,6 +16,8 @@ interface ChatMessageListProps {
   contextUsageLabel?: string | null;
   onFork?: (messageId: string) => void;
   onReprompt?: (messageId: string) => void;
+  pendingUserText?: string | null;
+  pendingStatus?: string | null;
 }
 
 export function ChatMessageList({
@@ -27,6 +29,8 @@ export function ChatMessageList({
   contextUsageLabel,
   onFork,
   onReprompt,
+  pendingUserText,
+  pendingStatus,
 }: ChatMessageListProps) {
   const copiedMessageId = useAppStore((state) => state.copiedMessageId);
   const setCopiedMessageId = useAppStore((state) => state.setCopiedMessageId);
@@ -36,7 +40,22 @@ export function ChatMessageList({
   const handleCopy = useCallback(async (text: string, messageId: string) => {
     if (!text.trim()) return;
     try {
-      await navigator.clipboard.writeText(text);
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        const ok = document.execCommand("copy");
+        document.body.removeChild(textarea);
+        if (!ok) {
+          throw new Error("Clipboard copy failed");
+        }
+      }
       setCopiedMessageId(messageId);
       window.setTimeout(() => {
         const current = useAppStore.getState().copiedMessageId;
@@ -97,6 +116,28 @@ export function ChatMessageList({
           onExport={handleExport}
         />
       ))}
+
+      {pendingUserText ? (
+        <>
+          <ChatMessageItem
+            key={"pending-user"}
+            message={{ id: "pending-user", role: "user", parts: [{ type: "text", text: pendingUserText }] }}
+            isStreaming={false}
+            artifactsEnabled={artifactsEnabled}
+            selectedModel={selectedModel}
+            contextUsageLabel={contextUsageLabel}
+            copied={false}
+            onCopy={handleCopy}
+            onExport={handleExport}
+          />
+          {pendingStatus ? (
+            <div className="flex items-center gap-2 text-[#9a9590] text-xs pl-2">
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+              <span>{pendingStatus}</span>
+            </div>
+          ) : null}
+        </>
+      ) : null}
       {showLoadingIndicator && (
         <div className="flex items-center gap-2 text-[#9a9590]">
           <Loader2 className="h-4 w-4 animate-spin" />

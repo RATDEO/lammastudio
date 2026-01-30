@@ -16,6 +16,9 @@ interface ChatConversationProps {
   onFork?: (messageId: string) => void;
   onReprompt?: (messageId: string) => void;
   showEmptyState: boolean;
+  pendingUserText?: string | null;
+  pendingStatus?: string | null;
+
   toolBelt: ReactNode;
   onScroll: () => void;
   messagesContainerRef: RefObject<HTMLDivElement | null>;
@@ -32,6 +35,8 @@ export function ChatConversation({
   onFork,
   onReprompt,
   showEmptyState,
+  pendingUserText,
+  pendingStatus,
   toolBelt,
   onScroll,
   messagesContainerRef,
@@ -50,6 +55,20 @@ export function ChatConversation({
             {showEmptyState ? (
               <div className="relative z-10 w-full max-w-2xl">
                 <div className="hidden md:block">{toolBelt}</div>
+                {(pendingUserText || pendingStatus) && (
+                  <div className="mt-6">
+                    <ChatMessageList
+                      messages={[]}
+                      isLoading={isLoading}
+                      error={error || undefined}
+                      artifactsEnabled={artifactsEnabled}
+                      selectedModel={selectedModel}
+                      contextUsageLabel={contextUsageLabel}
+                      pendingUserText={pendingUserText || undefined}
+                      pendingStatus={pendingStatus || undefined}
+                    />
+                  </div>
+                )}
               </div>
             ) : (
               <div className="relative z-10 flex flex-col min-h-0 w-full">
@@ -62,6 +81,8 @@ export function ChatConversation({
                   contextUsageLabel={contextUsageLabel}
                   onFork={onFork}
                   onReprompt={onReprompt}
+                  pendingUserText={pendingUserText}
+                  pendingStatus={pendingStatus}
                 />
                 <div ref={messagesEndRef} />
               </div>

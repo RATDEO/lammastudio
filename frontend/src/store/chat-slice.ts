@@ -143,6 +143,7 @@ export interface ChatState {
   mcpActionError: string | null;
 
   copiedMessageId: string | null;
+  messageSourceMap: Record<string, Array<{ title: string; url: string }>>;
   messageInlineThinkingExpanded: Record<string, boolean>;
   messageInlineToolsExpanded: Record<string, boolean>;
 
@@ -316,6 +317,7 @@ export interface ChatActions {
   setMcpActionError: (mcpActionError: string | null) => void;
 
   setCopiedMessageId: (copiedMessageId: string | null) => void;
+  setMessageSources: (messageId: string, sources: Array<{ title: string; url: string }>) => void;
   setMessageInlineThinkingExpanded: (messageId: string, expanded: boolean) => void;
   setMessageInlineToolsExpanded: (messageId: string, expanded: boolean) => void;
 
@@ -484,6 +486,7 @@ export const createChatSlice: StateCreator<ChatSlice, [], [], ChatSlice> = (set)
   mcpActionError: null,
 
   copiedMessageId: null,
+  messageSourceMap: {},
   messageInlineThinkingExpanded: {},
   messageInlineToolsExpanded: {},
 
@@ -653,6 +656,13 @@ export const createChatSlice: StateCreator<ChatSlice, [], [], ChatSlice> = (set)
   setMcpActionError: (mcpActionError) => set({ mcpActionError }),
 
   setCopiedMessageId: (copiedMessageId) => set({ copiedMessageId }),
+  setMessageSources: (messageId, sources) =>
+    set((state) => ({
+      messageSourceMap: {
+        ...state.messageSourceMap,
+        [messageId]: sources,
+      },
+    })),
   setMessageInlineThinkingExpanded: (messageId, expanded) =>
     set((state) => ({
       messageInlineThinkingExpanded: {

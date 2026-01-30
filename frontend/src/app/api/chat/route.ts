@@ -20,6 +20,11 @@ interface PostBody {
   system?: string;
 }
 
+type CompatMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
+
 function getClientInfo(req: Request) {
   const ip =
     req.headers.get("CF-Connecting-IP") ||
@@ -28,6 +33,63 @@ function getClientInfo(req: Request) {
     "unknown";
   const country = req.headers.get("CF-IPCountry") || "-";
   return { ip, country };
+}
+
+function buildCompatMessages(messages: UIMessage[], system?: string): CompatMessage[] {
+  const out: CompatMessage[] = [];
+  let systemPrefix = system?.trim() || "";
+
+  const append = (role: "user" | "assistant", content: string) => {
+    if (!content.trim()) return;
+    if (out.length > 0 && out[out.length - 1].role === role) {
+      out[out.length - 1].content += `\n${content}`;
+      return;
+    }
+    out.push({ role, content });
+  };
+
+  for (const message of messages) {
+    const role = message.role === "assistant" ? "assistant" : "user";
+    const textContent = message.parts
+      .filter((part): part is { type: "text"; text: string } => part.type === "text")
+      .map((part) => part.text)
+      .join("");
+
+    const toolContent = message.parts
+      .filter((part) => typeof part.type === "string" && part.type.startsWith("tool-"))
+      .map((part) => {
+        const toolName = part.type.replace(/^tool-/, "");
+        const input = "input" in part && part.input != null ? JSON.stringify(part.input) : "";
+        const output = "output" in part && part.output != null ? JSON.stringify(part.output) : "";
+        const errorText = "errorText" in part && part.errorText ? part.errorText : "";
+        const payload = [
+          input ? `input: ${input}` : "",
+          output ? `output: ${output}` : "",
+          errorText ? `error: ${errorText}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n");
+        return payload ? `Tool ${toolName}:\n${payload}` : "";
+      })
+      .filter((value) => value.length > 0)
+      .join("\n");
+
+    const combined = [textContent, toolContent].filter(Boolean).join("\n").trim();
+    if (!combined) continue;
+
+    if (systemPrefix && role === "user") {
+      append("user", `System:\n${systemPrefix}\n\n${combined}`);
+      systemPrefix = "";
+    } else {
+      append(role, combined);
+    }
+  }
+
+  if (systemPrefix) {
+    append("user", `System:\n${systemPrefix}`);
+  }
+
+  return out;
 }
 
 export async function POST(req: Request) {
@@ -79,13 +141,16 @@ export async function POST(req: Request) {
       return acc;
     }, {});
 
-    // Convert UIMessages to model messages using the SDK helper
-    const modelMessages = await convertToModelMessages(messages);
+    const llamaCompat = process.env.VLLM_STUDIO_LLAMA_CPP_COMPAT === "1";
+
+    const modelMessages = llamaCompat
+      ? buildCompatMessages(messages, system)
+      : await convertToModelMessages(messages);
 
     const result = streamText({
       model: modelInstance,
       messages: modelMessages,
-      system: system?.trim() || undefined,
+      system: llamaCompat ? undefined : system?.trim() || undefined,
       tools: toolSet as unknown as ToolSet,
       temperature: 0.7,
       onChunk: ({ chunk }) => {

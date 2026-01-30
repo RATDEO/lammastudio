@@ -1,0 +1,3 @@
+[submodule "controller/runtime/mcp/gptr-mcp"]
+	path = controller/runtime/mcp/gptr-mcp
+	url = https://github.com/assafelovic/gptr-mcp

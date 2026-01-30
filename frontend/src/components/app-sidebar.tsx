@@ -159,7 +159,8 @@ export function AppSidebar({ children }: AppSidebarProps) {
 
   const createNewChat = () => {
     setMobileOpen(false);
-    router.push("/chat?new=1");
+    const ts = Date.now();
+    router.push(`/chat?new=1&ts=${ts}`);
   };
 
   return (

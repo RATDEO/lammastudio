@@ -608,6 +608,19 @@ a.nav-link:hover,
   text-decoration: underline;
 }
 
+.chat-markdown a.citation-link {
+  font-size: 0.75em;
+  color: #d6c9b4;
+  opacity: 0.75;
+  padding: 0 0.15em;
+  vertical-align: super;
+}
+
+.chat-markdown a.citation-link:hover {
+  opacity: 1;
+  text-decoration: underline;
+}
+
 .chat-markdown table {
   width: 100%;
   border-collapse: collapse;

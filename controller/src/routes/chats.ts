@@ -61,6 +61,7 @@ export const registerChatsRoutes = (app: Hono, context: AppContext): void => {
     const content = typeof body["content"] === "string" ? body["content"] : undefined;
     const model = typeof body["model"] === "string" ? body["model"] : undefined;
     const toolCalls = Array.isArray(body["tool_calls"]) ? body["tool_calls"] : undefined;
+    const sources = Array.isArray(body["sources"]) ? body["sources"] : undefined;
     const promptTokens = typeof body["request_prompt_tokens"] === "number" ? body["request_prompt_tokens"] : undefined;
     const toolsTokens = typeof body["request_tools_tokens"] === "number" ? body["request_tools_tokens"] : undefined;
     const totalInputTokens = typeof body["request_total_input_tokens"] === "number" ? body["request_total_input_tokens"] : undefined;
@@ -73,6 +74,7 @@ export const registerChatsRoutes = (app: Hono, context: AppContext): void => {
       content,
       model,
       toolCalls,
+      sources,
       promptTokens,
       toolsTokens,
       totalInputTokens,

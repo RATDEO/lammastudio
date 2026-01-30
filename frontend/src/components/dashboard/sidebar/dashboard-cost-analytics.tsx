@@ -1,5 +1,5 @@
 import type { Metrics } from "@/lib/types";
-import { ELECTRICITY_PRICE_PLN } from "./dashboard-stats-utils";
+import { ELECTRICITY_PRICE_GBP } from "./dashboard-stats-utils";
 
 interface DashboardCostAnalyticsProps {
   metrics: Metrics | null;
@@ -9,7 +9,7 @@ export function DashboardCostAnalytics({ metrics }: DashboardCostAnalyticsProps)
   if (!metrics?.lifetime_energy_kwh && !metrics?.current_power_watts) return null;
 
   const totalCost = metrics?.lifetime_energy_kwh
-    ? (metrics.lifetime_energy_kwh * ELECTRICITY_PRICE_PLN).toFixed(2)
+    ? (metrics.lifetime_energy_kwh * ELECTRICITY_PRICE_GBP).toFixed(2)
     : null;
 
   return (
@@ -18,7 +18,7 @@ export function DashboardCostAnalytics({ metrics }: DashboardCostAnalyticsProps)
       <div className="space-y-3">
         {totalCost && (
           <div>
-            <div className="text-lg font-light text-(--success)/80 tabular-nums">{totalCost} PLN</div>
+            <div className="text-lg font-light text-(--success)/80 tabular-nums">{"£" + totalCost}</div>
           </div>
         )}
         {metrics?.current_power_watts && (

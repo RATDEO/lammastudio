@@ -15,6 +15,13 @@ import { notFound } from "../core/errors";
  */
 export const registerModelsRoutes = (app: Hono, context: AppContext): void => {
   app.get("/v1/models", async (ctx) => {
+    const litellmBase = process.env["LITELLM_URL"] ?? process.env["LITELLM_BASE_URL"];
+    const masterKey = process.env["LITELLM_MASTER_KEY"] ?? "sk-master";
+    const modelsUrl = litellmBase
+      ? `${litellmBase}/v1/models`
+      : `http://${context.config.inference_host}:${context.config.inference_port}/v1/models`;
+    const modelsHeaders = litellmBase ? { Authorization: `Bearer ${masterKey}` } : undefined;
+
     const recipes = context.stores.recipeStore.list();
     const current = await context.processManager.findInferenceProcess(context.config.inference_port);
     let activeModelData: { data?: Array<{ max_model_len?: number }> } | null = null;
@@ -22,8 +29,9 @@ export const registerModelsRoutes = (app: Hono, context: AppContext): void => {
       try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 5000);
-        const response = await fetch(`http://${context.config.inference_host}:${context.config.inference_port}/v1/models`, {
+        const response = await fetch(modelsUrl, {
           signal: controller.signal,
+          headers: modelsHeaders,
         });
         clearTimeout(timeout);
         if (response.ok) {
@@ -64,13 +72,54 @@ export const registerModelsRoutes = (app: Hono, context: AppContext): void => {
       });
     }
 
-    const payload: OpenAIModelList = { object: "list", data: models };
-    if (payload.data.length === 0) {
+    if (litellmBase) {
       try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 5000);
-        const response = await fetch(`http://${context.config.inference_host}:${context.config.inference_port}/v1/models`, {
+        const response = await fetch(modelsUrl, {
           signal: controller.signal,
+          headers: modelsHeaders,
+        });
+        clearTimeout(timeout);
+        if (response.ok) {
+          const data = await response.json();
+          const collected = [];
+          if (Array.isArray(data?.data) && data.data.length > 0) {
+            collected.push(...data.data);
+          } else if (Array.isArray(data?.models) && data.models.length > 0) {
+            const mapped = data.models
+              .map((entry) => entry?.model ?? entry?.name)
+              .filter(Boolean)
+              .map((id) => ({
+                id: String(id),
+                object: "model",
+                created: now,
+                owned_by: "litellm",
+              }));
+            collected.push(...mapped);
+          }
+          if (collected.length > 0) {
+            const existing = new Set(models.map((model) => model.id));
+            for (const entry of collected) {
+              if (entry && !existing.has(entry.id)) {
+                models.push(entry);
+              }
+            }
+          }
+        }
+      } catch {
+        // Ignore LiteLLM merge failures; fall back to recipe list.
+      }
+    }
+
+    const payload: OpenAIModelList = { object: "list", data: models };
+    if (payload.data.length === 0 && !litellmBase) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000);
+        const response = await fetch(modelsUrl, {
+          signal: controller.signal,
+          headers: modelsHeaders,
         });
         clearTimeout(timeout);
         if (response.ok) {
@@ -99,6 +148,13 @@ export const registerModelsRoutes = (app: Hono, context: AppContext): void => {
   });
 
   app.get("/v1/models/:modelId", async (ctx) => {
+    const litellmBase = process.env["LITELLM_URL"] ?? process.env["LITELLM_BASE_URL"];
+    const masterKey = process.env["LITELLM_MASTER_KEY"] ?? "sk-master";
+    const modelsUrl = litellmBase
+      ? `${litellmBase}/v1/models`
+      : `http://${context.config.inference_host}:${context.config.inference_port}/v1/models`;
+    const modelsHeaders = litellmBase ? { Authorization: `Bearer ${masterKey}` } : undefined;
+
     const modelId = ctx.req.param("modelId");
     const recipes = context.stores.recipeStore.list();
     let recipe: Recipe | null = null;
@@ -120,8 +176,9 @@ export const registerModelsRoutes = (app: Hono, context: AppContext): void => {
       try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 5000);
-        const response = await fetch(`http://${context.config.inference_host}:${context.config.inference_port}/v1/models`, {
+        const response = await fetch(modelsUrl, {
           signal: controller.signal,
+          headers: modelsHeaders,
         });
         clearTimeout(timeout);
         if (response.ok) {
@@ -148,6 +205,13 @@ export const registerModelsRoutes = (app: Hono, context: AppContext): void => {
   });
 
   app.get("/v1/studio/models", async (ctx) => {
+    const litellmBase = process.env["LITELLM_URL"] ?? process.env["LITELLM_BASE_URL"];
+    const masterKey = process.env["LITELLM_MASTER_KEY"] ?? "sk-master";
+    const modelsUrl = litellmBase
+      ? `${litellmBase}/v1/models`
+      : `http://${context.config.inference_host}:${context.config.inference_port}/v1/models`;
+    const modelsHeaders = litellmBase ? { Authorization: `Bearer ${masterKey}` } : undefined;
+
     const recipes = context.stores.recipeStore.list();
     const recipesByPath = new Map<string, string[]>();
     const recipesByBasename = new Map<string, string[]>();
@@ -228,8 +292,9 @@ export const registerModelsRoutes = (app: Hono, context: AppContext): void => {
       try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 5000);
-        const response = await fetch(`http://${context.config.inference_host}:${context.config.inference_port}/v1/models`, {
+        const response = await fetch(modelsUrl, {
           signal: controller.signal,
+          headers: modelsHeaders,
         });
         clearTimeout(timeout);
         if (response.ok) {

@@ -38,6 +38,41 @@ interface ChatMessageItemProps {
   }) => void;
 }
 
+
+function applyCitationLinks(content: string, sources: Array<{ title: string; url: string }>) {
+  if (!content || sources.length === 0) return content;
+  const hasCitations = /\[(\d+)\]/.test(content);
+  const baseContent = hasCitations
+    ? content
+    : content
+        .split(new RegExp("\n\n+"))
+        .map((para, idx) => {
+          const trimmed = para.trim();
+          if (!trimmed) return para;
+          const citeIndex = (idx % sources.length) + 1;
+          return `${trimmed} [${citeIndex}]`;
+        })
+        .join("\n\n");
+  const replaceCitations = (text: string) =>
+    text.replace(/\[(\d+)\](?!\()/g, (match, num) => {
+      const idx = Number(num) - 1;
+      const source = sources[idx];
+      if (!source?.url) return match;
+      return `[${num}](${source.url})`;
+    });
+  const fenceRegex = /```[\s\S]*?```/g;
+  let lastIndex = 0;
+  let out = "";
+  let match: RegExpExecArray | null;
+  while ((match = fenceRegex.exec(baseContent)) !== null) {
+    out += replaceCitations(baseContent.slice(lastIndex, match.index));
+    out += match[0];
+    lastIndex = match.index + match[0].length;
+  }
+  out += replaceCitations(baseContent.slice(lastIndex));
+  return out;
+}
+
 type MessageMetadata = {
   model?: string;
   usage?: LanguageModelUsage;
@@ -171,6 +206,7 @@ function ChatMessageItemBase({
   onExport,
 }: ChatMessageItemProps) {
   const isUser = message.role === "user";
+  const messageSources = useAppStore((state) => state.messageSourceMap[message.id] ?? []);
 
   // Extract text content from parts
   const rawTextContent = message.parts
@@ -190,6 +226,9 @@ function ChatMessageItemBase({
   // For assistant messages, parse thinking content and get mainContent without <think> tags
   const parsedThinking = !isUser ? thinkingParser.parse(rawTextContent) : null;
   const textContent = isUser ? rawTextContent : parsedThinking?.mainContent || "";
+  const renderedContent = !isUser && messageSources.length > 0
+    ? applyCitationLinks(textContent, messageSources)
+    : textContent;
 
   // DEBUG: Log if </think> tag appears in textContent (should never happen)
   if (!isUser && textContent.includes("</think>")) {
@@ -389,7 +428,7 @@ function ChatMessageItemBase({
         {/* Text content with MessageRenderer */}
         {textContent ? (
           <MessageRenderer
-            content={textContent}
+            content={renderedContent}
             isStreaming={isStreaming}
             artifactsEnabled={artifactsEnabled}
           />

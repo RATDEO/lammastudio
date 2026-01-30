@@ -319,6 +319,8 @@ class APIClient {
     return this.request(`/mcp/tools/${server}/${tool}`, {
       method: "POST",
       body: JSON.stringify(args),
+      timeout: 120000,
+      retries: 0,
     });
   }
 

@@ -22,6 +22,7 @@ export function useChatTransport({
 }: UseChatTransportOptions) {
   const sessionIdRef = useRef<string | null>(currentSessionId);
   const updateSessions = useAppStore((state) => state.updateSessions);
+  const getMessageSources = () => useAppStore.getState().messageSourceMap;
 
   useEffect(() => {
     sessionIdRef.current = currentSessionId;
@@ -62,12 +63,14 @@ export function useChatTransport({
           }));
 
         const role = message.role === "system" ? "assistant" : message.role;
+        const sources = getMessageSources()[message.id];
         await api.addChatMessage(sessionId, {
           id: message.id,
           role,
           content: textContent,
           model: metadata?.model ?? selectedModel,
           tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
+          sources: sources && sources.length > 0 ? sources : undefined,
           prompt_tokens: promptTokens,
           completion_tokens: completionTokens,
           total_tokens: totalTokens,

@@ -383,10 +383,82 @@ function ToolItem({ item }: ToolItemProps) {
     return undefined;
   };
 
-  const getSources = (output?: unknown): string[] => {
+  const getSources = (output?: unknown): Array<{ title: string; url: string; domain: string }> => {
     if (!output) return [];
     const text = typeof output === "string" ? output : JSON.stringify(output);
-    const urlMatches = text.match(/https?:\/\/[^\s"'<>]+/g) || [];
+
+    try {
+      const parsed = typeof output === "string" ? JSON.parse(output) : output;
+      if (parsed && typeof parsed === "object") {
+        const record = parsed as Record<string, unknown>;
+        const sources = Array.isArray(record.sources) ? record.sources : [];
+        const fromSources = sources
+          .map((source) => {
+            if (!source || typeof source !== "object") return null;
+            const s = source as Record<string, unknown>;
+            const title = typeof s.title === "string" ? s.title : "";
+            const url = typeof s.url === "string" ? s.url : "";
+            if (!url) return null;
+            let domain = url;
+            try {
+              domain = new URL(url).hostname.replace("www.", "");
+            } catch {
+              domain = url;
+            }
+            return { title: title || domain, url, domain };
+          })
+          .filter(Boolean);
+        if (fromSources.length > 0) {
+          return fromSources as Array<{ title: string; url: string; domain: string }>;
+        }
+
+        const sourceUrls = Array.isArray(record.source_urls) ? record.source_urls : [];
+        const fromUrls = sourceUrls
+          .map((url) => {
+            if (typeof url !== "string" || !url) return null;
+            let domain = url;
+            try {
+              domain = new URL(url).hostname.replace("www.", "");
+            } catch {
+              domain = url;
+            }
+            return { title: domain, url, domain };
+          })
+          .filter(Boolean);
+        if (fromUrls.length > 0) {
+          return fromUrls as Array<{ title: string; url: string; domain: string }>;
+        }
+      }
+    } catch {
+      // fall back to text parsing
+    }
+
+    const sources: Array<{ title: string; url: string; domain: string }> = [];
+    const pairRegex = /Title:\s*(.*)\n.*?URL:\s*(\S+)/gi;
+    let match: RegExpExecArray | null;
+    while ((match = pairRegex.exec(text)) !== null) {
+      const title = (match[1] || "").trim();
+      const url = (match[2] || "").trim();
+      if (!url) continue;
+      let domain = url;
+      try {
+        domain = new URL(url).hostname.replace("www.", "");
+      } catch {
+        domain = url;
+      }
+      sources.push({ title: title || domain, url, domain });
+    }
+
+    if (sources.length > 0) {
+      const seen = new Set<string>();
+      return sources.filter((s) => {
+        if (!s.url || seen.has(s.url)) return false;
+        seen.add(s.url);
+        return true;
+      });
+    }
+
+    const urlMatches = text.match(/https?:\/\/[^\s"<>]+/g) || [];
     const domains = [
       ...new Set(
         urlMatches
@@ -399,10 +471,9 @@ function ToolItem({ item }: ToolItemProps) {
           })
           .filter(Boolean),
       ),
-    ].slice(0, 4);
-    return domains as string[];
+    ].slice(0, 6);
+    return domains.map((domain) => ({ title: domain, url: domain, domain }));
   };
-
   const mainArg = getMainArg(item.input);
   const sources = getSources(item.output);
   const toolName = getToolDisplayName(item.toolName);
@@ -432,20 +503,21 @@ function ToolItem({ item }: ToolItemProps) {
       )}
 
       {sources.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {sources.map((domain, i) => (
-            <span
-              key={i}
-              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#252321] text-[10px] text-[#7a7570]"
+        <div className="flex flex-col gap-1">
+          {sources.slice(0, 8).map((source, i) => (
+            <a
+              key={source.url || i}
+              href={source.url.startsWith("http") ? source.url : `https://${source.url}`}
+              target="_blank"
+              rel="noreferrer"
+              title={source.url}
+              className="text-[10px] text-[#c9c4bc] visited:text-[#c9c4bc] truncate hover:text-[#e8e4dd] transition-colors"
             >
-              <span className="w-2 h-2 rounded-full bg-[#3a3735]" />
-              {domain}
-            </span>
+              {i + 1}. {source.title || source.domain}
+            </a>
           ))}
-          {sources.length === 4 && (
-            <span className="px-1.5 py-0.5 rounded bg-[#252321] text-[10px] text-[#5a5550]">
-              +more
-            </span>
+          {sources.length > 8 && (
+            <div className="text-[10px] text-[#5a5550]">+{sources.length - 8} more</div>
           )}
         </div>
       )}

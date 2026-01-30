@@ -54,6 +54,17 @@ markdownIt.renderer.rules.link_open = (
     token.attrs![relIndex][1] = "noopener noreferrer";
   }
 
+  const nextToken = tokens[idx + 1] as { type?: string; content?: string } | undefined;
+  const isCitation = nextToken?.type === "text" && /^\d+$/.test(nextToken.content || "");
+  if (isCitation) {
+    const classIndex = token.attrIndex("class");
+    if (classIndex < 0) {
+      token.attrPush(["class", "citation-link"]);
+    } else if (token.attrs) {
+      token.attrs[classIndex][1] = `${token.attrs[classIndex][1]} citation-link`.trim();
+    }
+  }
+
   return self.renderToken(tokens, idx, options);
 };
 
