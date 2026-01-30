@@ -1,7 +1,7 @@
 // CRITICAL
 "use client";
 
-import { useRef, useEffect, type ChangeEvent, type KeyboardEvent } from "react";
+import { useRef, useEffect, type ChangeEvent, type KeyboardEvent, type ClipboardEvent, type DragEvent } from "react";
 import { AttachmentsPreview } from "./attachments-preview";
 import { RecordingIndicator } from "./recording-indicator";
 import { TranscriptionStatus } from "./transcription-status";
@@ -109,21 +109,23 @@ export function ToolBelt({
     });
   };
 
-  const handleFileSelect = async (e: ChangeEvent<HTMLInputElement>, type: "file" | "image") => {
-    const files = Array.from(e.target.files || []);
+
+  const addFiles = async (files: File[]) => {
+    if (files.length === 0) return;
     const newAttachments: Attachment[] = [];
 
     for (const file of files) {
+      const isImage = file.type.startsWith("image/");
       const attachment: Attachment = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        type: type === "image" ? "image" : "file",
+        type: isImage ? "image" : "file",
         name: file.name,
         size: file.size,
-        url: type === "image" ? URL.createObjectURL(file) : undefined,
+        url: isImage ? URL.createObjectURL(file) : undefined,
         file,
       };
 
-      if (type === "image") {
+      if (isImage) {
         try {
           attachment.base64 = await fileToBase64(file);
         } catch (err) {
@@ -135,6 +137,15 @@ export function ToolBelt({
     }
 
     updateAttachments((prev) => [...prev, ...newAttachments]);
+  };
+
+  const handleFileSelect = async (e: ChangeEvent<HTMLInputElement>, type: "file" | "image") => {
+    const files = Array.from(e.target.files || []);
+    if (type === "image") {
+      await addFiles(files.filter((file) => file.type.startsWith("image/")));
+    } else {
+      await addFiles(files);
+    }
     e.target.value = "";
   };
 
@@ -249,6 +260,29 @@ export function ToolBelt({
     setAttachments([]);
   };
 
+  const handlePaste = async (e: ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData?.items ? Array.from(e.clipboardData.items) : [];
+    const files = items
+      .filter((item) => item.kind === "file")
+      .map((item) => item.getAsFile())
+      .filter(Boolean) as File[];
+    if (files.length === 0) return;
+    e.preventDefault();
+    await addFiles(files);
+  };
+
+  const handleDrop = async (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const files = e.dataTransfer?.files ? Array.from(e.dataTransfer.files) : [];
+    if (files.length === 0) return;
+    await addFiles(files);
+    textareaRef.current?.focus();
+  };
+
+  const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+  };
+
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -285,6 +319,8 @@ export function ToolBelt({
           className={`relative flex flex-col border rounded-2xl md:rounded-xl bg-(--card) shadow-sm ${
             isLoading ? "border-blue-500/30" : "border-(--border)"
           }`}
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
         >
           <textarea
             ref={textareaRef}
@@ -295,6 +331,7 @@ export function ToolBelt({
                 : onChange(e.target.value)
             }
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             placeholder={
               isDisabled
                 ? "No model running"

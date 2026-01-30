@@ -2,6 +2,7 @@
 "use client";
 
 import { memo } from "react";
+import Image from "next/image";
 import type { UIMessage } from "@ai-sdk/react";
 import type { LanguageModelUsage } from "ai";
 import { useAppStore } from "@/store";
@@ -214,6 +215,11 @@ function ChatMessageItemBase({
     .map((part) => part.text)
     .join("");
 
+  const fileParts = message.parts.filter(
+    (part): part is { type: "file"; url: string; mediaType: string; filename?: string } =>
+      part.type === "file",
+  );
+
   // Extract AI SDK reasoning parts (type: "reasoning" from sendReasoning: true)
   const aiSdkReasoning = message.parts
     .filter(
@@ -310,6 +316,37 @@ function ChatMessageItemBase({
           <div className="flex items-center gap-2 mb-1">
             <span className="text-[10px] uppercase tracking-wider text-[#6a6560]">You</span>
           </div>
+          {fileParts.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-2" data-testid="user-attachments-mobile">
+              {fileParts.map((file, idx) => {
+                const isImage = file.mediaType?.startsWith("image/") || file.url.startsWith("data:image/");
+                if (!isImage) {
+                  return (
+                    <div
+                      key={`user-file-m-${idx}`}
+                      className="text-xs text-[#b8b4ad] border border-(--border) rounded px-2 py-1 bg-(--card)"
+                    >
+                      {file.filename || "Attachment"}
+                    </div>
+                  );
+                }
+                return (
+                  <div
+                    key={`user-image-m-${idx}`}
+                    className="relative overflow-hidden rounded-lg border border-(--border)"
+                  >
+                    <Image
+                      src={file.url}
+                      alt={file.filename || "uploaded image"}
+                      width={200}
+                      height={200}
+                      className="object-cover max-w-[200px] max-h-[200px]"
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          )}
           <div className="text-[15px] leading-relaxed text-[#e8e4dd] whitespace-pre-wrap break-words">
             {textContent}
           </div>
@@ -318,6 +355,37 @@ function ChatMessageItemBase({
         {/* Desktop: card style */}
         <div className="hidden md:flex justify-end">
           <div className="ml-auto max-w-[62%] rounded-xl border border-(--border) bg-(--card)/70 px-3 py-2">
+            {fileParts.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-2" data-testid="user-attachments">
+                {fileParts.map((file, idx) => {
+                  const isImage = file.mediaType?.startsWith("image/") || file.url.startsWith("data:image/");
+                  if (!isImage) {
+                    return (
+                      <div
+                        key={`user-file-${idx}`}
+                        className="text-xs text-[#b8b4ad] border border-(--border) rounded px-2 py-1 bg-(--card)"
+                      >
+                        {file.filename || "Attachment"}
+                      </div>
+                    );
+                  }
+                  return (
+                    <div
+                      key={`user-image-${idx}`}
+                      className="relative overflow-hidden rounded-lg border border-(--border)"
+                    >
+                      <Image
+                        src={file.url}
+                        alt={file.filename || "uploaded image"}
+                        width={240}
+                        height={240}
+                        className="object-cover max-w-[240px] max-h-[240px]"
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
             <div className="flex items-center gap-2 mb-1">
               <div className="text-[10px] uppercase tracking-[0.2em] text-[#9a9590]">You</div>
               <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -427,11 +495,41 @@ function ChatMessageItemBase({
 
         {/* Text content with MessageRenderer */}
         {textContent ? (
-          <MessageRenderer
-            content={renderedContent}
-            isStreaming={isStreaming}
-            artifactsEnabled={artifactsEnabled}
-          />
+          <>
+            {fileParts.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-3">
+                {fileParts.map((file, idx) => {
+                  const isImage = file.mediaType?.startsWith("image/") || file.url.startsWith("data:image/");
+                  if (!isImage) {
+                    return (
+                      <div
+                        key={`file-${idx}`}
+                        className="text-xs text-[#b8b4ad] border border-(--border) rounded px-2 py-1 bg-(--card)"
+                      >
+                        {file.filename || "Attachment"}
+                      </div>
+                    );
+                  }
+                  return (
+                    <div key={`image-${idx}`} className="relative overflow-hidden rounded-lg border border-(--border)">
+                      <Image
+                        src={file.url}
+                        alt={file.filename || "uploaded image"}
+                        width={240}
+                        height={240}
+                        className="object-cover max-w-[240px] max-h-[240px]"
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <MessageRenderer
+              content={renderedContent}
+              isStreaming={isStreaming}
+              artifactsEnabled={artifactsEnabled}
+            />
+          </>
         ) : isStreaming && !thinkingContent ? (
           <div className="flex items-center gap-2 text-[#6a6560]">
             <Loader2 className="h-4 w-4 animate-spin" />

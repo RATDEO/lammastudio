@@ -12,6 +12,8 @@ export interface ModelOption {
   id: string;
   name?: string;
   maxModelLen?: number;
+  runtimeContext?: number;
+  vision?: boolean;
 }
 
 export interface ActivityItem {

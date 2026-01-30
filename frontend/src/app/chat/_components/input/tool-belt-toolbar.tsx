@@ -161,7 +161,7 @@ export function ToolBeltToolbar({
           <DropdownItem
             icon={Globe}
             label="Web search & tools"
-            isActive={mcpEnabled}
+            isActive={Boolean(mcpEnabled && !deepResearchEnabled)}
             onClick={onMcpToggle}
             disabled={disabled}
           />

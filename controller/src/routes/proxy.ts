@@ -18,6 +18,41 @@ const switchLock = new AsyncLock();
  * @param context - App context.
  */
 export const registerProxyRoutes = (app: Hono, context: AppContext): void => {
+  const fetchSlots = async (preferV1: boolean) => {
+    const baseUrl = `http://${context.config.inference_host}:${context.config.inference_port}`;
+    const inferenceApiKey = context.config.inference_api_key || process.env["INFERENCE_API_KEY"];
+    const headers: Record<string, string> = {};
+    if (inferenceApiKey) {
+      headers.Authorization = `Bearer ${inferenceApiKey}`;
+    }
+    const urls = preferV1
+      ? [`${baseUrl}/v1/slots`, `${baseUrl}/slots`]
+      : [`${baseUrl}/slots`, `${baseUrl}/v1/slots`];
+    for (const url of urls) {
+      try {
+        const response = await fetch(url, { headers });
+        if (response.ok) {
+          const body = await response.text();
+          const contentType = response.headers.get("content-type") || "application/json";
+          return { status: response.status, body, contentType };
+        }
+      } catch {
+        // try next url
+      }
+    }
+    return { status: 404, body: JSON.stringify({ detail: "Slots endpoint not available" }), contentType: "application/json" };
+  };
+
+  app.get("/slots", async (ctx) => {
+    const result = await fetchSlots(false);
+    return ctx.body(result.body, result.status, { "Content-Type": result.contentType });
+  });
+
+  app.get("/v1/slots", async (ctx) => {
+    const result = await fetchSlots(true);
+    return ctx.body(result.body, result.status, { "Content-Type": result.contentType });
+  });
+
   /**
    * Normalize a model name for comparison.
    * @param value - Model name string.
@@ -61,28 +96,31 @@ export const registerProxyRoutes = (app: Hono, context: AppContext): void => {
    * @param requestedModel - Requested model name.
    * @returns Error message or null.
    */
-  const ensureModelRunning = async (requestedModel: string): Promise<string | null> => {
+  const ensureModelRunning = async (requestedModel: string, recipe: Recipe | null): Promise<string | null> => {
     if (!requestedModel) {
       return null;
     }
-    const requestedLower = requestedModel.toLowerCase();
-    const current = await context.processManager.findInferenceProcess(context.config.inference_port);
-    if (current?.served_model_name && current.served_model_name.toLowerCase() === requestedLower) {
-      return null;
-    }
-    const recipe = findRecipeByModel(requestedModel);
     if (!recipe) {
       return null;
     }
+    const requestedLower = requestedModel.toLowerCase();
+    const targetPort = recipe.port ?? context.config.inference_port;
+    const current = await context.processManager.findInferenceProcess(targetPort);
+    if (current?.served_model_name && current.served_model_name.toLowerCase() === requestedLower) {
+      return null;
+    }
 
-    const release = await switchLock.acquire();
+    const samePort = targetPort === context.config.inference_port;
+    const release = samePort ? await switchLock.acquire() : null;
     try {
-      const latest = await context.processManager.findInferenceProcess(context.config.inference_port);
+      const latest = await context.processManager.findInferenceProcess(targetPort);
       if (latest?.served_model_name && latest.served_model_name.toLowerCase() === requestedLower) {
         return null;
       }
-      await context.processManager.evictModel(false);
-      await delay(2000);
+      if (samePort) {
+        await context.processManager.evictModel(false, targetPort);
+        await delay(2000);
+      }
       const launch = await context.processManager.launchModel(recipe);
       if (!launch.success) {
         return `Failed to launch model ${requestedModel}: ${launch.message}`;
@@ -99,7 +137,7 @@ export const registerProxyRoutes = (app: Hono, context: AppContext): void => {
         try {
           const controller = new AbortController();
           const timeoutHandle = setTimeout(() => controller.abort(), 5000);
-          const response = await fetch(`http://${context.config.inference_host}:${context.config.inference_port}/health`, {
+          const response = await fetch(`http://${context.config.inference_host}:${targetPort}/health`, {
             signal: controller.signal,
           });
           clearTimeout(timeoutHandle);
@@ -113,7 +151,9 @@ export const registerProxyRoutes = (app: Hono, context: AppContext): void => {
       }
       return `Model ${requestedModel} failed to become ready (timeout)`;
     } finally {
-      release();
+      if (release) {
+        release();
+      }
     }
   };
 
@@ -190,13 +230,15 @@ IMPORTANT: Do not use emoji, Unicode symbols, or decorative box-drawing characte
     let isStreaming = false;
     let modifiedBody: ArrayBuffer | null = null;
     let bodyChanged = false;
+    let matchedRecipe: Recipe | null = null;
 
     try {
       const bodyText = new TextDecoder().decode(bodyBuffer);
       const parsed = JSON.parse(bodyText) as Record<string, unknown>;
       if (typeof parsed["model"] === "string") {
         requestedModel = parsed["model"];
-        const matched = findRecipeByModel(requestedModel);
+        matchedRecipe = findRecipeByModel(requestedModel);
+        const matched = matchedRecipe;
         if (matched) {
           const canonical = matched.served_model_name ?? matched.id;
           if (canonical && canonical !== requestedModel) {
@@ -237,7 +279,7 @@ IMPORTANT: Do not use emoji, Unicode symbols, or decorative box-drawing characte
     const useLiteLLM = Boolean(litellmBase);
 
     if (requestedModel && !useLiteLLM) {
-      const switchError = await ensureModelRunning(requestedModel);
+      const switchError = await ensureModelRunning(requestedModel, matchedRecipe);
       if (switchError) {
         throw serviceUnavailable(switchError);
       }
@@ -255,9 +297,10 @@ IMPORTANT: Do not use emoji, Unicode symbols, or decorative box-drawing characte
     } else if (incomingAuth) {
       headers.Authorization = incomingAuth;
     }
+    const targetPort = matchedRecipe?.port ?? context.config.inference_port;
     const targetUrl = useLiteLLM
       ? `${litellmBase}/v1/chat/completions`
-      : `http://${context.config.inference_host}:${context.config.inference_port}/v1/chat/completions`;
+      : `http://${context.config.inference_host}:${targetPort}/v1/chat/completions`;
 
     if (!isStreaming) {
       const response = await fetch(targetUrl, { method: "POST", headers, body: finalBody });

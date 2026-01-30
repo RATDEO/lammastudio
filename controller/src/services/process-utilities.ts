@@ -23,8 +23,12 @@ const splitCommand = (command: string): string[] => {
  */
 export const extractFlag = (args: string[], flag: string): string | undefined => {
   for (let index = 0; index < args.length; index += 1) {
-    if (args[index] === flag && index + 1 < args.length) {
+    const current = args[index];
+    if (current === flag && index + 1 < args.length) {
       return args[index + 1];
+    }
+    if (current?.startsWith(`${flag}=`)) {
+      return current.slice(flag.length + 1);
     }
   }
   return undefined;

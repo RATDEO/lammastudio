@@ -19,6 +19,7 @@ import { useChatTools } from "../../hooks/use-chat-tools";
 import { useChatUsage } from "../../hooks/use-chat-usage";
 import { useChatDerived } from "../../hooks/use-chat-derived";
 import { useChatTransport } from "../../hooks/use-chat-transport";
+import { useRealtimeStatus } from "@/hooks/use-realtime-status";
 import type { UIMessage } from "@ai-sdk/react";
 import type { Artifact, StoredMessage, StoredToolCall } from "@/lib/types";
 import { useContextManagement, type CompactionEvent } from "@/lib/services/context-management";
@@ -66,6 +67,7 @@ export function ChatPage() {
   const exportOpen = useAppStore((state) => state.exportOpen);
   const setExportOpen = useAppStore((state) => state.setExportOpen);
   const availableModels = useAppStore((state) => state.availableModels);
+  const { status: realtimeStatus } = useRealtimeStatus();
   const setAvailableModels = useAppStore((state) => state.setAvailableModels);
   const sessionUsage = useAppStore((state) => state.sessionUsage);
   // Refs
@@ -128,6 +130,7 @@ export function ChatPage() {
   const [pendingUserText, setPendingUserText] = useState<string | null>(null);
   const [pendingStatus, setPendingStatus] = useState<string | null>(null);
   const [isRestoringSession, setIsRestoringSession] = useState(false);
+  const [runtimeContextByModel, setRuntimeContextByModel] = useState<Record<string, number>>({});
   const [compacting, setCompacting] = useState(false);
   const [compactionError, setCompactionError] = useState<string | null>(null);
   const lastCompactionSignatureRef = useRef<string | null>(null);
@@ -251,7 +254,7 @@ export function ChatPage() {
     [],
   );
   // AI SDK useChat - the source of truth for messages
-  const { messages, sendMessage, stop, status, error, setMessages, addToolOutput } = useChat({
+  const { messages, sendMessage, stop, status, error, setMessages, addToolOutput, clearError } = useChat({
     transport,
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
     onToolCall: async ({ toolCall }) => {
@@ -348,7 +351,7 @@ URL: ${s.url}`)
     () => availableModels.find((model) => model.id === selectedModel),
     [availableModels, selectedModel],
   );
-  const maxContext = selectedModel ? (selectedModelMeta?.maxModelLen ?? 32768) : undefined;
+  const maxContext = selectedModelMeta?.runtimeContext ?? selectedModelMeta?.maxModelLen;
   const contextMessages = useMemo(() => {
     return messages
       .map((message) => {
@@ -388,6 +391,7 @@ URL: ${s.url}`)
       .filter((message) => message.content.trim().length > 0);
   }, [messages]);
   const contextStats = useMemo(() => {
+    console.info("[Context] maxContext", { maxContext });
     if (!maxContext) return null;
     const tools = getToolDefinitions?.() ?? [];
     return calculateStats(contextMessages, maxContext, systemPrompt, tools);
@@ -826,6 +830,11 @@ URL: ${s.url}`)
   useEffect(() => {
     loadSessions();
   }, [loadSessions]);
+
+  useEffect(() => {
+    clearError?.();
+  }, [currentSessionId, clearError]);
+
   // Handle PWA resume - reload session when app becomes visible again
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -865,6 +874,7 @@ URL: ${s.url}`)
 // Handle URL session/new params
   useEffect(() => {
     if (newChatFromUrl) {
+      clearError?.();
       startNewSession();
       setMessages([]);
       setHasPendingUserMessage(false);
@@ -924,7 +934,30 @@ URL: ${s.url}`)
       loadMCPTools();
     }
   }, [mcpEnabled, loadMCPServers, loadMCPTools]);
-  // Load available models from OpenAI-compatible endpoint on mount
+  
+  const refreshRuntimeContext = useCallback(async (modelId?: string) => {
+    const targetModel = modelId || selectedModel;
+    if (!targetModel) return;
+    try {
+      let slotRes = await fetch('/api/proxy/slots');
+      if (!slotRes.ok) {
+        slotRes = await fetch('/api/proxy/v1/slots');
+      }
+      if (!slotRes.ok) return;
+      const slots = await slotRes.json();
+      if (Array.isArray(slots) && slots.length > 0 && typeof slots[0]?.n_ctx === 'number') {
+        setRuntimeContextByModel((prev) => ({ ...prev, [targetModel]: slots[0].n_ctx }));
+      }
+    } catch {
+      // ignore runtime context failures
+    }
+  }, [selectedModel]);
+
+  useEffect(() => {
+    void refreshRuntimeContext(selectedModel);
+  }, [selectedModel, refreshRuntimeContext]);
+
+// Load available models from OpenAI-compatible endpoint on mount
   useEffect(() => {
     const loadModels = async () => {
       try {
@@ -946,14 +979,20 @@ URL: ${s.url}`)
               model?: string;
               name?: string;
               max_model_len?: number;
+              meta?: { n_ctx_train?: number };
             };
             const id = record.id ?? record.model ?? record.name;
             if (!id) return [];
+            const maxModelLen = record.max_model_len ?? record.meta?.n_ctx_train ?? undefined;
+            const runtimeContext = runtimeContextByModel[id];
+            const vision = Boolean((record as { vision?: boolean }).vision);
             return [
               {
                 id,
                 name: id,
-                maxModelLen: record.max_model_len ?? undefined,
+                maxModelLen,
+                runtimeContext,
+                vision,
               },
             ];
           })
@@ -984,7 +1023,27 @@ URL: ${s.url}`)
     };
     loadModels();
   }, [selectedModel, setAvailableModels, setSelectedModel]);
-  // Load MCP servers when settings modal opens
+  useEffect(() => {
+    if (!realtimeStatus?.running || !realtimeStatus.process) return;
+    const served = realtimeStatus.process.served_model_name;
+    const path = realtimeStatus.process.model_path;
+    const base = path ? path.split("/").pop() : null;
+    const candidates = [served, base].filter(Boolean) as string[];
+    let next: string | null = null;
+    for (const candidate of candidates) {
+      if (availableModels.some((model) => model.id === candidate)) {
+        next = candidate;
+        break;
+      }
+    }
+    if (!next && candidates.length > 0) {
+      next = candidates[0] ?? null;
+    }
+    if (next && next !== selectedModel) {
+      setSelectedModel(next);
+    }
+  }, [realtimeStatus, availableModels, selectedModel, setSelectedModel]);
+// Load MCP servers when settings modal opens
   useEffect(() => {
     if (mcpSettingsOpen) {
       loadMCPServers();
@@ -1041,11 +1100,42 @@ URL: ${s.url}`)
     a.click();
     URL.revokeObjectURL(url);
   }, [currentSessionId, currentSessionTitle, selectedModel, messages]);
-  const sendUserMessage = useCallback(
+  const isVisionModel = useCallback(
+    (modelId: string | null): boolean => {
+      if (!modelId) return false;
+      const entry = availableModels.find((model) => model.id === modelId);
+      if (entry?.vision) return true;
+      const lower = modelId.toLowerCase();
+      return lower.includes("vl") || lower.includes("vision") || lower.includes("llava") || lower.includes("minicpm");
+    },
+    [availableModels],
+  );
+
+  const buildFilePartsFromAttachments = (attachments?: Attachment[]) => {
+    if (!attachments || attachments.length === 0) return [] as Array<{ type: "file"; mediaType: string; filename?: string; url: string }>;
+    const fileParts: Array<{ type: "file"; mediaType: string; filename?: string; url: string }> = [];
+    for (const att of attachments) {
+      if (att.type === "image" && att.base64) {
+        const mediaType = att.file?.type || "image/png";
+        const url = `data:${mediaType};base64,${att.base64}`;
+        fileParts.push({ type: "file", mediaType, filename: att.name, url });
+      }
+    }
+    return fileParts;
+  };
+
+const sendUserMessage = useCallback(
     async (text: string, attachments?: Attachment[], options?: { clearInput?: boolean }) => {
       if (!selectedModel) return;
       if (!text.trim() && (!attachments || attachments.length === 0)) return;
       if (isLoading) return;
+      const hasImage = Boolean(attachments?.some((att) => att.type === "image"));
+      if (hasImage && !isVisionModel(selectedModel)) {
+        clearError?.();
+        setPendingStatus("Image input is not supported by the selected model. Switch to a vision model.");
+        window.setTimeout(() => setPendingStatus(null), 4000);
+        return;
+      }
       // Only open side panel on desktop
       if (window.innerWidth >= 768) {
         setToolPanelOpen(true);
@@ -1209,16 +1299,14 @@ ${contextText}`
       if (finalText.trim()) {
         parts.push({ type: "text", text: finalText });
       }
-      // Add image attachments as file parts
+      // Add image attachments as file parts (data URLs) so vision models receive them
+      const fileParts = buildFilePartsFromAttachments(attachments);
+      for (const filePart of fileParts) {
+        parts.push(filePart);
+      }
       if (attachments) {
         for (const att of attachments) {
-          if (att.type === "image" && att.base64) {
-            parts.push({
-              type: "text",
-              text: `[Image: ${att.name}]`,
-            });
-          } else if (att.type === "file" && att.file) {
-            // For files, add file name reference
+          if (att.type === "file" && att.file) {
             parts.push({
               type: "text",
               text: `[File: ${att.name}]`,
@@ -1262,6 +1350,7 @@ ${deepResearchContext}`
       sendMessage(
         {
           text: finalText,
+          files: fileParts.length > 0 ? fileParts : undefined,
         },
         {
           body: {
@@ -1367,8 +1456,12 @@ ${deepResearchContext}`
       onModelChange={handleModelChange}
       mcpEnabled={mcpEnabled}
       onMcpToggle={() => {
-        console.log("[ChatPage] MCP toggle:", !mcpEnabled);
-        setMcpEnabled(!mcpEnabled);
+        const nextEnabled = !mcpEnabled || deepResearch.enabled;
+        console.log("[ChatPage] MCP toggle:", nextEnabled);
+        if (deepResearch.enabled) {
+          setDeepResearch({ ...deepResearch, enabled: false });
+        }
+        setMcpEnabled(nextEnabled);
       }}
       artifactsEnabled={artifactsEnabled}
       onArtifactsToggle={() => {
@@ -1380,7 +1473,9 @@ ${deepResearchContext}`
         const nextEnabled = !deepResearch.enabled;
         console.log("[ChatPage] Deep Research toggle:", nextEnabled);
         setDeepResearch({ ...deepResearch, enabled: nextEnabled });
-        if (nextEnabled && !mcpEnabled) setMcpEnabled(true);
+        if (nextEnabled) {
+          setMcpEnabled(true);
+        }
       }}
       elapsedSeconds={elapsedSeconds}
       queuedContext={queuedContext}

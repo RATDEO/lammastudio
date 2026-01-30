@@ -16,37 +16,99 @@ import { notFound } from "../core/errors";
 export const registerModelsRoutes = (app: Hono, context: AppContext): void => {
   app.get("/v1/models", async (ctx) => {
     const litellmBase = process.env["LITELLM_URL"] ?? process.env["LITELLM_BASE_URL"];
+    const inferenceApiKey = context.config.inference_api_key || process.env["INFERENCE_API_KEY"];
     const masterKey = process.env["LITELLM_MASTER_KEY"] ?? "sk-master";
     const modelsUrl = litellmBase
       ? `${litellmBase}/v1/models`
       : `http://${context.config.inference_host}:${context.config.inference_port}/v1/models`;
-    const modelsHeaders = litellmBase ? { Authorization: `Bearer ${masterKey}` } : undefined;
+    const inferenceModelsUrl = `http://${context.config.inference_host}:${context.config.inference_port}/v1/models`;
+    const modelsHeaders = litellmBase
+      ? { Authorization: `Bearer ${masterKey}` }
+      : inferenceApiKey
+        ? { Authorization: `Bearer ${inferenceApiKey}` }
+        : undefined;
 
     const recipes = context.stores.recipeStore.list();
-    const current = await context.processManager.findInferenceProcess(context.config.inference_port);
-    let activeModelData: { data?: Array<{ max_model_len?: number }> } | null = null;
-    if (current) {
+    const recipeModelIds = new Set<string>();
+    const recipeModelBasenames = new Set<string>();
+    for (const recipe of recipes) {
+      if (recipe.served_model_name) {
+        recipeModelIds.add(recipe.served_model_name);
+      }
+      recipeModelIds.add(recipe.id);
+      if (recipe.model_path) {
+        recipeModelBasenames.add(basename(recipe.model_path));
+      }
+    }
+    const models: OpenAIModelInfo[] = [];
+    const now = Math.floor(Date.now() / 1000);
+
+
+    const mergeInferenceModels = async () => {
       try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 5000);
-        const response = await fetch(modelsUrl, {
+        const response = await fetch(inferenceModelsUrl, {
           signal: controller.signal,
-          headers: modelsHeaders,
+          headers: inferenceApiKey ? { Authorization: `Bearer ${inferenceApiKey}` } : undefined,
         });
         clearTimeout(timeout);
-        if (response.ok) {
-          activeModelData = (await response.json()) as { data?: Array<{ max_model_len?: number }> };
+        if (!response.ok) return;
+        const data = await response.json();
+        const collected: OpenAIModelInfo[] = [];
+        if (Array.isArray(data?.data) && data.data.length > 0) {
+          for (const entry of data.data) {
+            if (!entry || !entry.id) continue;
+            const id = String(entry.id);
+            const base = basename(id);
+            if (recipeModelIds.has(id) || recipeModelBasenames.has(base)) {
+              continue;
+            }
+            const maxLen = entry.max_model_len ?? entry.meta?.n_ctx_train;
+            collected.push({
+              id,
+              object: "model",
+              created: entry.created ?? now,
+              owned_by: entry.owned_by ?? (litellmBase ? "litellm" : "llamacpp"),
+              max_model_len: maxLen,
+            });
+          }
+        } else if (Array.isArray(data?.models) && data.models.length > 0) {
+          for (const entry of data.models) {
+            const id = entry?.model ?? entry?.name;
+            if (!id) continue;
+            const base = basename(String(id));
+            if (recipeModelIds.has(String(id)) || recipeModelBasenames.has(base)) {
+              continue;
+            }
+            collected.push({
+              id: String(id),
+              object: "model",
+              created: now,
+              owned_by: litellmBase ? "litellm" : "llamacpp",
+            });
+          }
+        }
+        if (collected.length > 0) {
+          const existing = new Map(models.map((model) => [model.id, model]));
+          for (const entry of collected) {
+            const existingEntry = existing.get(entry.id);
+            if (existingEntry) {
+              existingEntry.max_model_len = entry.max_model_len ?? existingEntry.max_model_len;
+            } else {
+              models.push(entry);
+            }
+          }
         }
       } catch {
-        activeModelData = null;
+        // ignore inference merge failures
       }
-    }
+    };
 
-    const models: OpenAIModelInfo[] = [];
-    const now = Math.floor(Date.now() / 1000);
     for (const recipe of recipes) {
       let isActive = false;
       let maxModelLength = recipe.max_model_len;
+      const current = await context.processManager.findInferenceProcess(recipe.port ?? context.config.inference_port);
       if (current) {
         if (current.served_model_name && recipe.served_model_name === current.served_model_name) {
           isActive = true;
@@ -57,11 +119,28 @@ export const registerModelsRoutes = (app: Hono, context: AppContext): void => {
             isActive = true;
           }
         }
-        if (activeModelData?.data?.[0]?.max_model_len) {
-          maxModelLength = activeModelData.data[0].max_model_len;
+        try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 5000);
+          const response = await fetch(`http://${context.config.inference_host}:${recipe.port ?? context.config.inference_port}/v1/models`, {
+            signal: controller.signal,
+            headers: inferenceApiKey ? { Authorization: `Bearer ${inferenceApiKey}` } : undefined,
+          });
+          clearTimeout(timeout);
+          if (response.ok) {
+            const data = await response.json() as { data?: Array<{ max_model_len?: number }> };
+            if (data?.data?.[0]?.max_model_len) {
+              maxModelLength = data.data[0].max_model_len;
+            }
+          }
+        } catch {
+          // ignore
         }
       }
-      const modelId = recipe.served_model_name ?? recipe.id;
+      const modelId = recipe.served_model_name
+        ?? (recipe.backend === "llamacpp" && recipe.model_path ? basename(recipe.model_path) : null)
+        ?? recipe.id;
+      const vision = Boolean((recipe.extra_args as Record<string, unknown>)?.mmproj);
       models.push({
         id: modelId,
         object: "model",
@@ -69,16 +148,19 @@ export const registerModelsRoutes = (app: Hono, context: AppContext): void => {
         owned_by: "vllm-studio",
         active: isActive,
         max_model_len: maxModelLength,
+        vision,
       });
     }
+
+    await mergeInferenceModels();
 
     if (litellmBase) {
       try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 5000);
-        const response = await fetch(modelsUrl, {
+        const response = await fetch(inferenceModelsUrl, {
           signal: controller.signal,
-          headers: modelsHeaders,
+          headers: inferenceApiKey ? { Authorization: `Bearer ${inferenceApiKey}` } : undefined,
         });
         clearTimeout(timeout);
         if (response.ok) {
@@ -117,9 +199,9 @@ export const registerModelsRoutes = (app: Hono, context: AppContext): void => {
       try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 5000);
-        const response = await fetch(modelsUrl, {
+        const response = await fetch(inferenceModelsUrl, {
           signal: controller.signal,
-          headers: modelsHeaders,
+          headers: inferenceApiKey ? { Authorization: `Bearer ${inferenceApiKey}` } : undefined,
         });
         clearTimeout(timeout);
         if (response.ok) {
@@ -149,11 +231,17 @@ export const registerModelsRoutes = (app: Hono, context: AppContext): void => {
 
   app.get("/v1/models/:modelId", async (ctx) => {
     const litellmBase = process.env["LITELLM_URL"] ?? process.env["LITELLM_BASE_URL"];
+    const inferenceApiKey = context.config.inference_api_key || process.env["INFERENCE_API_KEY"];
     const masterKey = process.env["LITELLM_MASTER_KEY"] ?? "sk-master";
     const modelsUrl = litellmBase
       ? `${litellmBase}/v1/models`
       : `http://${context.config.inference_host}:${context.config.inference_port}/v1/models`;
-    const modelsHeaders = litellmBase ? { Authorization: `Bearer ${masterKey}` } : undefined;
+    const inferenceModelsUrl = `http://${context.config.inference_host}:${context.config.inference_port}/v1/models`;
+    const modelsHeaders = litellmBase
+      ? { Authorization: `Bearer ${masterKey}` }
+      : inferenceApiKey
+        ? { Authorization: `Bearer ${inferenceApiKey}` }
+        : undefined;
 
     const modelId = ctx.req.param("modelId");
     const recipes = context.stores.recipeStore.list();
@@ -168,7 +256,6 @@ export const registerModelsRoutes = (app: Hono, context: AppContext): void => {
       throw notFound("Model not found");
     }
 
-    const current = await context.processManager.findInferenceProcess(context.config.inference_port);
     let isActive = false;
     let maxModelLength = recipe.max_model_len;
     if (current && current.model_path && recipe.model_path && current.model_path.includes(recipe.model_path)) {
@@ -176,9 +263,9 @@ export const registerModelsRoutes = (app: Hono, context: AppContext): void => {
       try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 5000);
-        const response = await fetch(modelsUrl, {
+        const response = await fetch(inferenceModelsUrl, {
           signal: controller.signal,
-          headers: modelsHeaders,
+          headers: inferenceApiKey ? { Authorization: `Bearer ${inferenceApiKey}` } : undefined,
         });
         clearTimeout(timeout);
         if (response.ok) {
@@ -206,11 +293,17 @@ export const registerModelsRoutes = (app: Hono, context: AppContext): void => {
 
   app.get("/v1/studio/models", async (ctx) => {
     const litellmBase = process.env["LITELLM_URL"] ?? process.env["LITELLM_BASE_URL"];
+    const inferenceApiKey = context.config.inference_api_key || process.env["INFERENCE_API_KEY"];
     const masterKey = process.env["LITELLM_MASTER_KEY"] ?? "sk-master";
     const modelsUrl = litellmBase
       ? `${litellmBase}/v1/models`
       : `http://${context.config.inference_host}:${context.config.inference_port}/v1/models`;
-    const modelsHeaders = litellmBase ? { Authorization: `Bearer ${masterKey}` } : undefined;
+    const inferenceModelsUrl = `http://${context.config.inference_host}:${context.config.inference_port}/v1/models`;
+    const modelsHeaders = litellmBase
+      ? { Authorization: `Bearer ${masterKey}` }
+      : inferenceApiKey
+        ? { Authorization: `Bearer ${inferenceApiKey}` }
+        : undefined;
 
     const recipes = context.stores.recipeStore.list();
     const recipesByPath = new Map<string, string[]>();
@@ -292,9 +385,9 @@ export const registerModelsRoutes = (app: Hono, context: AppContext): void => {
       try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 5000);
-        const response = await fetch(modelsUrl, {
+        const response = await fetch(inferenceModelsUrl, {
           signal: controller.signal,
-          headers: modelsHeaders,
+          headers: inferenceApiKey ? { Authorization: `Bearer ${inferenceApiKey}` } : undefined,
         });
         clearTimeout(timeout);
         if (response.ok) {

@@ -380,7 +380,7 @@ function RecipesContent() {
                   : "No recipes yet. Create one to get started."}
               </div>
             ) : (
-              <div className="border border-[#363432] rounded-lg overflow-hidden">
+              <div className="border border-[#363432] rounded-lg overflow-visible">
                 <table className="w-full">
                   <thead className="bg-[#1b1b1b] border-b border-[#363432]">
                     <tr>
@@ -479,7 +479,7 @@ function RecipesContent() {
                                 <MoreVertical className="w-4 h-4" />
                               </button>
                               {recipeMenuOpen === recipe.id && (
-                                <div className="absolute right-0 mt-1 w-32 bg-[#1b1b1b] border border-[#363432] rounded-lg shadow-lg z-10">
+                                <div className="absolute right-0 mt-1 w-32 bg-[#1b1b1b] border border-[#363432] rounded-lg shadow-lg z-50">
                                   <button
                                     onClick={() => handleEditRecipe(recipe)}
                                     className="w-full px-3 py-2 text-left text-sm hover:bg-[#363432] transition-colors"

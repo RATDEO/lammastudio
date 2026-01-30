@@ -141,7 +141,10 @@ export async function POST(req: Request) {
       return acc;
     }, {});
 
-    const llamaCompat = process.env.VLLM_STUDIO_LLAMA_CPP_COMPAT === "1";
+    const hasFileParts = messages.some((message) =>
+      Array.isArray(message.parts) && message.parts.some((part) => part.type === "file"),
+    );
+    const llamaCompat = process.env.VLLM_STUDIO_LLAMA_CPP_COMPAT === "1" && !hasFileParts;
 
     const modelMessages = llamaCompat
       ? buildCompatMessages(messages, system)

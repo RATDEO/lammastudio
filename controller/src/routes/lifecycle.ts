@@ -62,13 +62,13 @@ export const registerLifecycleRoutes = (app: Hono, context: AppContext): void =>
 
   app.get("/recipes", async (ctx) => {
     const recipes = context.stores.recipeStore.list();
-    const current = await context.processManager.findInferenceProcess(context.config.inference_port);
     const launchingId = context.launchState.getLaunchingRecipeId();
-    const result = recipes.map((recipe) => {
+    const result = await Promise.all(recipes.map(async (recipe) => {
       let status = "stopped";
       if (launchingId === recipe.id) {
         status = "starting";
       }
+      const current = await context.processManager.findInferenceProcess(recipe.port ?? context.config.inference_port);
       if (current) {
         if (current.served_model_name && recipe.served_model_name === current.served_model_name) {
           status = "running";
@@ -83,7 +83,7 @@ export const registerLifecycleRoutes = (app: Hono, context: AppContext): void =>
         }
       }
       return { ...recipe, status };
-    });
+    }));
     return ctx.json(result);
   });
 
@@ -143,7 +143,7 @@ export const registerLifecycleRoutes = (app: Hono, context: AppContext): void =>
       if (cancel) {
         cancel.abort();
       }
-      await context.processManager.evictModel(true);
+      await context.processManager.evictModel(true, recipe.port);
       await delay(1000);
     }
 
@@ -155,13 +155,13 @@ export const registerLifecycleRoutes = (app: Hono, context: AppContext): void =>
     try {
       releaseLock = await switchLock.acquireWithTimeout(2000);
       if (!releaseLock) {
-        await context.processManager.evictModel(true);
+        await context.processManager.evictModel(true, recipe.port);
         await delay(1000);
         releaseLock = await switchLock.acquire();
       }
 
       await context.eventManager.publishLaunchProgress(recipeId, "evicting", "Clearing VRAM...", 0);
-      await context.processManager.evictModel(true);
+      await context.processManager.evictModel(true, recipe.port);
       await delay(1000);
 
       if (cancelController.signal.aborted) {
@@ -237,6 +237,9 @@ export const registerLifecycleRoutes = (app: Hono, context: AppContext): void =>
           const timeoutHandle = setTimeout(() => controller.abort(), 5000);
           const response = await fetch(`http://${context.config.inference_host}:${context.config.inference_port}/health`, {
             signal: controller.signal,
+            headers: context.config.inference_api_key
+              ? { Authorization: `Bearer ${context.config.inference_api_key}` }
+              : undefined,
           });
           clearTimeout(timeoutHandle);
           if (response.status === 200) {
@@ -307,24 +310,28 @@ export const registerLifecycleRoutes = (app: Hono, context: AppContext): void =>
 
   app.post("/launch/:recipeId/cancel", async (ctx) => {
     const recipeId = ctx.req.param("recipeId");
+    const recipe = context.stores.recipeStore.get(recipeId);
+    const port = recipe?.port ?? context.config.inference_port;
     const cancel = launchCancelControllers.get(recipeId);
     if (!cancel) {
       const current = context.launchState.getLaunchingRecipeId();
       if (current !== recipeId) {
         throw notFound(`No launch in progress for ${recipeId}`);
       }
-      await context.processManager.evictModel(true);
+      await context.processManager.evictModel(true, port);
       return ctx.json({ success: true, message: "Launch aborted via eviction" });
     }
     cancel.abort();
-    await context.processManager.evictModel(true);
+    await context.processManager.evictModel(true, port);
     return ctx.json({ success: true, message: `Launch of ${recipeId} cancelled` });
   });
 
   app.post("/evict", async (ctx) => {
     const release = await switchLock.acquire();
     try {
-      const pid = await context.processManager.evictModel(Boolean(ctx.req.query("force")));
+      const portParam = ctx.req.query("port");
+      const port = portParam ? Number(portParam) : undefined;
+      const pid = await context.processManager.evictModel(Boolean(ctx.req.query("force")), port);
       return ctx.json({ success: true, evicted_pid: pid });
     } finally {
       release();

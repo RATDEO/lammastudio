@@ -30,7 +30,7 @@ import {
 export interface ProcessManager {
     findInferenceProcess: (port: number) => Promise<ProcessInfo | null>;
     launchModel: (recipe: Recipe) => Promise<LaunchResult>;
-    evictModel: (force: boolean) => Promise<number | null>;
+    evictModel: (force: boolean, port?: number) => Promise<number | null>;
     killProcess: (pid: number, force: boolean) => Promise<boolean>;
 }
 
@@ -70,8 +70,9 @@ export const createProcessManager = (
             }
             let modelPath =
                 extractFlag(proc.args, "--model") ||
-                extractFlag(proc.args, "--model-path");
-            let servedModelName = extractFlag(proc.args, "--served-model-name");
+                extractFlag(proc.args, "--model-path") ||
+                extractFlag(proc.args, "-m");
+            let servedModelName = extractFlag(proc.args, "--served-model-name") || extractFlag(proc.args, "--alias");
 
             if (!modelPath) {
                 const serveIndex = proc.args.indexOf("serve");
@@ -206,7 +207,7 @@ export const createProcessManager = (
     const launchModel = async (recipe: Recipe): Promise<LaunchResult> => {
         const updatedRecipe: Recipe = {
             ...recipe,
-            port: config.inference_port,
+            port: recipe.port || config.inference_port,
         };
         const command =
             updatedRecipe.backend === "sglang"
@@ -341,8 +342,9 @@ export const createProcessManager = (
      * @param force - Force kill if true.
      * @returns Evicted pid or null.
      */
-    const evictModel = async (force: boolean): Promise<number | null> => {
-        const current = await findInferenceProcess(config.inference_port);
+    const evictModel = async (force: boolean, port?: number): Promise<number | null> => {
+        const targetPort = Number.isFinite(port) ? Number(port) : config.inference_port;
+        const current = await findInferenceProcess(targetPort);
         if (!current) {
             return null;
         }

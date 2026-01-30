@@ -78,6 +78,7 @@ export interface OpenAIModelInfo {
   owned_by: string;
   active: boolean;
   max_model_len?: number | null;
+  vision?: boolean;
 }
 
 /**
