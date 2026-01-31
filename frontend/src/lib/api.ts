@@ -194,8 +194,9 @@ class APIClient {
     });
   }
 
-  async evict(force = false): Promise<{ success: boolean; evicted_pid?: number }> {
-    return this.request(`/evict?force=${force}`, { method: "POST" });
+  async evict(force = false, port?: number): Promise<{ success: boolean; evicted_pid?: number }> {
+    const portParam = Number.isFinite(port) ? `&port=${port}` : "";
+    return this.request(`/evict?force=${force}${portParam}`, { method: "POST" });
   }
 
   async waitReady(timeout = 300): Promise<{ ready: boolean; elapsed: number; error?: string }> {
@@ -340,17 +341,17 @@ class APIClient {
   }
 
   async getLogSessions(): Promise<{ sessions: LogSession[] }> {
-    return this.request("/logs");
+    return this.request("/logs", { timeout: 120000, retries: 0 });
   }
 
   async getLogs(sessionId: string, limit?: number): Promise<{ logs: string[] }> {
     const query = limit ? `?limit=${limit}` : "";
-    return this.request(`/logs/${sessionId}${query}`);
+    return this.request(`/logs/${sessionId}${query}`, { timeout: 120000, retries: 0 });
   }
 
   async getLogContent(sessionId: string, limit?: number): Promise<{ content: string }> {
     const query = limit ? `?limit=${limit}` : "";
-    return this.request(`/logs/${sessionId}${query}`);
+    return this.request(`/logs/${sessionId}${query}`, { timeout: 120000, retries: 0 });
   }
 
   async deleteLogSession(sessionId: string): Promise<void> {
@@ -401,8 +402,8 @@ class APIClient {
     return this.request(`/mcp/servers/${name}`, { method: "DELETE" });
   }
 
-  async evictModel(force = false): Promise<{ success: boolean }> {
-    return this.evict(force);
+  async evictModel(force = false, port?: number): Promise<{ success: boolean }> {
+    return this.evict(force, port);
   }
 
   async exportRecipes(): Promise<{ content: unknown }> {

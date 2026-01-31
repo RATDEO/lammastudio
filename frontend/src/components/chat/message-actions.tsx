@@ -4,6 +4,7 @@
 import { Bookmark, BookmarkCheck, ThumbsUp, ThumbsDown, Copy, Check, MoreVertical } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAppStore } from '@/store';
+import { copyText } from '@/lib/clipboard';
 
 interface MessageActionsProps {
   content: string;
@@ -35,10 +36,14 @@ export function MessageActions({ content, messageId, onBookmark, onReact }: Mess
     showMenu: boolean;
   };
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(content);
-    setLegacyMessageActions(messageId, { copied: true });
-    setTimeout(() => setLegacyMessageActions(messageId, { copied: false }), 2000);
+  const handleCopy = async () => {
+    const success = await copyText(content);
+    if (success) {
+      setLegacyMessageActions(messageId, { copied: true });
+      setTimeout(() => setLegacyMessageActions(messageId, { copied: false }), 2000);
+      return;
+    }
+    console.error('Failed to copy message');
   };
 
   const handleBookmark = () => {

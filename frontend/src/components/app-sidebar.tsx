@@ -17,6 +17,7 @@ import {
   Wrench,
   Compass,
   Plus,
+  Sparkles,
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import api from "@/lib/api";
@@ -26,6 +27,7 @@ const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/chat", label: "Chat", icon: MessageSquare },
   { href: "/recipes", label: "Recipes", icon: Wrench },
+  { href: "/image-lab", label: "Image Lab", icon: Sparkles },
   { href: "/discover", label: "Discover", icon: Compass },
   { href: "/logs", label: "Logs", icon: FileText },
   { href: "/usage", label: "Usage", icon: BarChart3 },

@@ -8,6 +8,7 @@ import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { CodeSandbox } from "./code-sandbox";
 import { ArtifactRenderer } from "../artifacts/artifact-renderer";
 import { useMessageParsing } from "@/lib/services/message-parsing";
+import { copyText } from "@/lib/clipboard";
 import { useAppStore } from "@/store";
 
 // Map common code languages to artifact types
@@ -73,10 +74,12 @@ export function EnhancedCodeBlock({
     artifactType &&
     ["html", "react", "javascript", "svg"].includes(artifactType);
 
-  const copyCode = () => {
-    navigator.clipboard.writeText(code);
-    updateState({ copied: true });
-    setTimeout(() => updateState({ copied: false }), 2000);
+  const copyCode = async () => {
+    const success = await copyText(code);
+    if (success) {
+      updateState({ copied: true });
+      setTimeout(() => updateState({ copied: false }), 2000);
+    }
   };
 
   if (isStreaming) {

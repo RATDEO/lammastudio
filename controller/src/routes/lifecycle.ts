@@ -3,7 +3,7 @@ import type { Hono } from "hono";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AppContext } from "../types/context";
-import type { LaunchResult, Recipe } from "../types/models";
+import type { LaunchResult, ProcessInfo, Recipe } from "../types/models";
 import { AsyncLock, delay } from "../core/async";
 import { badRequest, notFound } from "../core/errors";
 import { parseRecipe } from "../stores/recipe-serializer";
@@ -60,6 +60,31 @@ export const registerLifecycleRoutes = (app: Hono, context: AppContext): void =>
     return payload;
   };
 
+  /**
+   * Check if the running process matches the recipe model identity.
+   * @param recipe - Recipe data.
+   * @param current - Process info.
+   * @returns True if the process already serves this recipe.
+   */
+  const isSameModel = (recipe: Recipe, current: ProcessInfo): boolean => {
+    if (recipe.backend === "sdcpp" && current.backend === "sdcpp") {
+      return true;
+    }
+    if (current.served_model_name && recipe.served_model_name && current.served_model_name === recipe.served_model_name) {
+      return true;
+    }
+    if (current.model_path && recipe.model_path) {
+      const normalize = (value: string): string => value.replace(/\/+$/, "");
+      const currentPath = normalize(current.model_path);
+      const recipePath = normalize(recipe.model_path);
+      if (currentPath === recipePath) {
+        return true;
+      }
+      return currentPath.split("/").pop() === recipePath.split("/").pop();
+    }
+    return false;
+  };
+
   app.get("/recipes", async (ctx) => {
     const recipes = context.stores.recipeStore.list();
     const launchingId = context.launchState.getLaunchingRecipeId();
@@ -70,7 +95,9 @@ export const registerLifecycleRoutes = (app: Hono, context: AppContext): void =>
       }
       const current = await context.processManager.findInferenceProcess(recipe.port ?? context.config.inference_port);
       if (current) {
-        if (current.served_model_name && recipe.served_model_name === current.served_model_name) {
+        if (recipe.backend === "sdcpp" && current.backend === "sdcpp") {
+          status = "running";
+        } else if (current.served_model_name && recipe.served_model_name === current.served_model_name) {
           status = "running";
         } else if (current.model_path) {
           // Compare normalized paths (exact match)
@@ -134,6 +161,17 @@ export const registerLifecycleRoutes = (app: Hono, context: AppContext): void =>
     if (!recipe) {
       throw notFound("Recipe not found");
     }
+    const targetPort = recipe.port ?? context.config.inference_port;
+    const alreadyRunning = await context.processManager.findInferenceProcess(targetPort);
+    if (alreadyRunning && isSameModel(recipe, alreadyRunning)) {
+      await context.eventManager.publishLaunchProgress(recipeId, "ready", "Model is already running", 1.0);
+      return ctx.json({
+        success: true,
+        pid: alreadyRunning.pid,
+        message: "Model is already running",
+        log_file: join("/tmp", `vllm_${recipeId}.log`),
+      } as LaunchResult);
+    }
 
     const currentLaunching = context.launchState.getLaunchingRecipeId();
     if (currentLaunching && currentLaunching !== recipeId) {
@@ -144,6 +182,9 @@ export const registerLifecycleRoutes = (app: Hono, context: AppContext): void =>
         cancel.abort();
       }
       await context.processManager.evictModel(true, recipe.port);
+      if (recipe.backend === "sdcpp") {
+        await context.processManager.evictModel(true, context.config.inference_port);
+      }
       await delay(1000);
     }
 
@@ -162,6 +203,16 @@ export const registerLifecycleRoutes = (app: Hono, context: AppContext): void =>
 
       await context.eventManager.publishLaunchProgress(recipeId, "evicting", "Clearing VRAM...", 0);
       await context.processManager.evictModel(true, recipe.port);
+      if (recipe.backend === "sdcpp") {
+        await context.processManager.evictModel(true, context.config.inference_port);
+      }
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        const remaining = await context.processManager.findInferenceProcess(targetPort);
+        if (!remaining) {
+          break;
+        }
+        await delay(500);
+      }
       await delay(1000);
 
       if (cancelController.signal.aborted) {
@@ -182,6 +233,8 @@ export const registerLifecycleRoutes = (app: Hono, context: AppContext): void =>
       const timeout = 300_000;
       let ready = false;
       let fatalError: string | null = null;
+      const healthPort = recipe.port ?? context.config.inference_port;
+      const healthUrl = `http://${context.config.inference_host}:${healthPort}/health`;
       const fatalPatterns = [
         // vLLM/PyTorch patterns
         "raise ValueError",
@@ -235,7 +288,7 @@ export const registerLifecycleRoutes = (app: Hono, context: AppContext): void =>
         try {
           const controller = new AbortController();
           const timeoutHandle = setTimeout(() => controller.abort(), 5000);
-          const response = await fetch(`http://${context.config.inference_host}:${context.config.inference_port}/health`, {
+          const response = await fetch(healthUrl, {
             signal: controller.signal,
             headers: context.config.inference_api_key
               ? { Authorization: `Bearer ${context.config.inference_api_key}` }
@@ -248,6 +301,14 @@ export const registerLifecycleRoutes = (app: Hono, context: AppContext): void =>
           }
         } catch {
           ready = false;
+        }
+
+        if (launch.pid && !pidExists(launch.pid)) {
+          const exitTail = readLogTail(logFilePath, 2000);
+          fatalError = exitTail
+            ? `Process exited early: ${exitTail.slice(-500)}`
+            : "Process exited early";
+          break;
         }
 
         const elapsed = Math.floor((Date.now() - start) / 1000);

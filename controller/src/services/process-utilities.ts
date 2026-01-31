@@ -48,6 +48,9 @@ export const detectBackend = (args: string[]): string | null => {
   if (joined.includes("llama-server") || joined.includes("llama_server") || joined.includes("llama.cpp")) {
     return "llamacpp";
   }
+  if (joined.includes("sdcpp-server")) {
+    return "sdcpp";
+  }
   if (joined.includes("vllm.entrypoints.openai.api_server")) {
     return "vllm";
   }
@@ -69,7 +72,7 @@ export const detectBackend = (args: string[]): string | null => {
  */
 export const listProcesses = (): Array<{ pid: number; args: string[] }> => {
   try {
-    const result = spawnSync("ps", ["-eo", "pid=,args="]);
+    const result = spawnSync("ps", ["-eo", "pid=,args=", "-ww"]);
     if (result.status !== 0) {
       return [];
     }

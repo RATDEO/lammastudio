@@ -21,7 +21,7 @@ export function recipeToCommand(recipe: Recipe): string {
   const backend = recipe.backend || "vllm";
 
   // For llama.cpp, we don't need CUDA_VISIBLE_DEVICES in the same way
-  if (backend !== "llamacpp") {
+  if (backend !== "llamacpp" && backend !== "sdcpp") {
     const tp = recipe.tp || recipe.tensor_parallel_size || 1;
     const pp = recipe.pp || recipe.pipeline_parallel_size || 1;
     const totalGpus = tp * pp;
@@ -79,6 +79,38 @@ export function recipeToCommand(recipe: Recipe): string {
       lines.push(`  --alias ${recipe.served_model_name} \\`);
     }
 
+    lines.push(`  --host ${recipe.host || "0.0.0.0"} \\`);
+    lines.push(`  --port ${recipe.port || 8000}`);
+  } else if (backend === "sdcpp") {
+    const extraArgs = recipe.extra_args || {};
+    const serverPath = (extraArgs.sdcpp_server_path as string) || "sdcpp-server.py";
+    const sdCliPath = (extraArgs.sd_cli_path as string) || "sd-cli";
+    const baseArgs: string[] = [];
+
+    if (recipe.model_path) {
+      baseArgs.push("--diffusion-model", recipe.model_path);
+    }
+    if (typeof extraArgs.vae === "string" && extraArgs.vae) {
+      baseArgs.push("--vae", extraArgs.vae as string);
+    }
+    if (typeof extraArgs.llm === "string" && extraArgs.llm) {
+      baseArgs.push("--llm", extraArgs.llm as string);
+    }
+    if (typeof extraArgs.llm_vision === "string" && extraArgs.llm_vision) {
+      baseArgs.push("--llm_vision", extraArgs.llm_vision as string);
+    }
+    if (extraArgs["diffusion-fa"]) {
+      baseArgs.push("--diffusion-fa");
+    }
+    if (extraArgs["offload-to-cpu"]) {
+      baseArgs.push("--offload-to-cpu");
+    }
+
+    lines.push(`python3 ${serverPath} \\`);
+    lines.push(`  --sd-cli ${sdCliPath} \\`);
+    if (baseArgs.length > 0) {
+      lines.push(`  --base-args-json '${JSON.stringify(baseArgs)}' \\`);
+    }
     lines.push(`  --host ${recipe.host || "0.0.0.0"} \\`);
     lines.push(`  --port ${recipe.port || 8000}`);
   } else if (backend === "sglang") {
@@ -165,6 +197,8 @@ export function parseCommand(command: string, existingRecipe?: Partial<Recipe>):
   // Detect backend
   if (normalizedCmd.includes("llama-server") || normalizedCmd.includes("llama_server")) {
     recipe.backend = "llamacpp";
+  } else if (normalizedCmd.includes("sdcpp-server")) {
+    recipe.backend = "sdcpp";
   } else if (normalizedCmd.includes("sglang")) {
     recipe.backend = "sglang";
   }
@@ -173,6 +207,9 @@ export function parseCommand(command: string, existingRecipe?: Partial<Recipe>):
   if (recipe.backend === "llamacpp") {
     // llama.cpp uses -m for model path
     const modelMatch = normalizedCmd.match(/-m\s+([^\s]+)/);
+    if (modelMatch) recipe.model_path = modelMatch[1];
+  } else if (recipe.backend === "sdcpp") {
+    const modelMatch = normalizedCmd.match(/--diffusion-model\s+([^\s]+)/);
     if (modelMatch) recipe.model_path = modelMatch[1];
   } else {
     const modelMatch = normalizedCmd.match(/(?:vllm serve|--model-path|--model)\s+(\/[^\s]+)/);

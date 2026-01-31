@@ -8,6 +8,7 @@ import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { CodeSandbox } from './code-sandbox';
 import { ArtifactRenderer, getArtifactType } from './artifact-renderer';
 import { useAppStore } from '@/store';
+import { copyText } from '@/lib/clipboard';
 
 interface EnhancedCodeBlockProps {
   children: string;
@@ -41,10 +42,12 @@ export function EnhancedCodeBlock({
   const lang = language || className?.replace('language-', '') || 'text';
   const code = String(children).replace(/\n$/, '');
 
-  const copyCode = () => {
-    navigator.clipboard.writeText(code);
-    updateState({ copied: true });
-    setTimeout(() => updateState({ copied: false }), 2000);
+  const copyCode = async () => {
+    const success = await copyText(code);
+    if (success) {
+      updateState({ copied: true });
+      setTimeout(() => updateState({ copied: false }), 2000);
+    }
   };
 
   // Check if this should be rendered as an artifact

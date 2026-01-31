@@ -106,19 +106,48 @@ export const registerProxyRoutes = (app: Hono, context: AppContext): void => {
     const requestedLower = requestedModel.toLowerCase();
     const targetPort = recipe.port ?? context.config.inference_port;
     const current = await context.processManager.findInferenceProcess(targetPort);
-    if (current?.served_model_name && current.served_model_name.toLowerCase() === requestedLower) {
-      return null;
+    if (current) {
+      if (recipe.backend === "sdcpp" && current.backend === "sdcpp") {
+        return null;
+      }
+      if (current.served_model_name && current.served_model_name.toLowerCase() === requestedLower) {
+        return null;
+      }
+      if (current.model_path && recipe.model_path) {
+        const normalize = (value: string): string => value.replace(/\/+$/, "");
+        const currentPath = normalize(current.model_path);
+        const recipePath = normalize(recipe.model_path);
+        if (currentPath === recipePath || currentPath.split("/").pop() === recipePath.split("/").pop()) {
+          return null;
+        }
+      }
     }
 
     const samePort = targetPort === context.config.inference_port;
     const release = samePort ? await switchLock.acquire() : null;
     try {
       const latest = await context.processManager.findInferenceProcess(targetPort);
-      if (latest?.served_model_name && latest.served_model_name.toLowerCase() === requestedLower) {
-        return null;
+      if (latest) {
+        if (recipe.backend === "sdcpp" && latest.backend === "sdcpp") {
+          return null;
+        }
+        if (latest.served_model_name && latest.served_model_name.toLowerCase() === requestedLower) {
+          return null;
+        }
+        if (latest.model_path && recipe.model_path) {
+          const normalize = (value: string): string => value.replace(/\/+$/, "");
+          const currentPath = normalize(latest.model_path);
+          const recipePath = normalize(recipe.model_path);
+          if (currentPath === recipePath || currentPath.split("/").pop() === recipePath.split("/").pop()) {
+            return null;
+          }
+        }
       }
       if (samePort) {
         await context.processManager.evictModel(false, targetPort);
+        await delay(2000);
+      } else if (recipe.backend === "sdcpp") {
+        await context.processManager.evictModel(false, context.config.inference_port);
         await delay(2000);
       }
       const launch = await context.processManager.launchModel(recipe);
@@ -217,6 +246,72 @@ IMPORTANT: Do not use emoji, Unicode symbols, or decorative box-drawing characte
     const lower = model.toLowerCase();
     return lower.includes("glm");
   };
+
+  const forwardImagesRequest = async (ctx: any, path: string) => {
+    let bodyBuffer: ArrayBuffer;
+    try {
+      bodyBuffer = await ctx.req.arrayBuffer();
+    } catch {
+      throw new HttpStatus(400, "Invalid request body");
+    }
+
+    let requestedModel: string | null = null;
+    let matchedRecipe: Recipe | null = null;
+    let modifiedBody: ArrayBuffer | null = null;
+
+    try {
+      const bodyText = new TextDecoder().decode(bodyBuffer);
+      const parsed = JSON.parse(bodyText) as Record<string, unknown>;
+      if (typeof parsed["model"] === "string") {
+        requestedModel = parsed["model"];
+        matchedRecipe = findRecipeByModel(requestedModel);
+        if (matchedRecipe) {
+          const canonical = matchedRecipe.served_model_name ?? matchedRecipe.id;
+          if (canonical && canonical !== requestedModel) {
+            parsed["model"] = canonical;
+            requestedModel = canonical;
+            modifiedBody = new TextEncoder().encode(JSON.stringify(parsed)).buffer;
+          }
+        }
+      }
+    } catch {
+      requestedModel = null;
+    }
+
+    if (requestedModel) {
+      const switchError = await ensureModelRunning(requestedModel, matchedRecipe);
+      if (switchError) {
+        throw serviceUnavailable(switchError);
+      }
+    }
+
+    const inferenceApiKey = context.config.inference_api_key || process.env["INFERENCE_API_KEY"];
+    const incomingAuth = ctx.req.header("authorization");
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (inferenceApiKey) {
+      headers.Authorization = `Bearer ${inferenceApiKey}`;
+    } else if (incomingAuth) {
+      headers.Authorization = incomingAuth;
+    }
+
+    const targetPort = matchedRecipe?.port ?? context.config.inference_port;
+    const targetUrl = `http://${context.config.inference_host}:${targetPort}${path}`;
+    const response = await fetch(targetUrl, {
+      method: "POST",
+      headers,
+      body: modifiedBody ?? bodyBuffer,
+    });
+    const contentType = response.headers.get("content-type") || "application/json";
+    const body = await response.text();
+    return ctx.body(body, response.status, { "Content-Type": contentType });
+  };
+
+  app.post("/v1/images", async (ctx) => forwardImagesRequest(ctx, "/v1/images"));
+  app.post("/v1/images/generations", async (ctx) =>
+    forwardImagesRequest(ctx, "/v1/images/generations"),
+  );
 
   app.post("/v1/chat/completions", async (ctx) => {
     let bodyBuffer: ArrayBuffer;

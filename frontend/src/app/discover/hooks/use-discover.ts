@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import api from "@/lib/api";
+import { copyText } from "@/lib/clipboard";
 import type { HuggingFaceModel, ModelInfo } from "@/lib/types";
 import { extractProvider, normalizeModelId } from "../_components/utils";
 
@@ -122,10 +123,12 @@ export function useDiscover() {
     }
   }, [page, loading, hasMore, fetchModels]);
 
-  const copyModelId = useCallback((modelId: string) => {
-    navigator.clipboard.writeText(modelId);
-    setCopiedId(modelId);
-    setTimeout(() => setCopiedId(null), 2000);
+  const copyModelId = useCallback(async (modelId: string) => {
+    const success = await copyText(modelId);
+    if (success) {
+      setCopiedId(modelId);
+      setTimeout(() => setCopiedId(null), 2000);
+    }
   }, []);
 
   const providers = useMemo(() => {

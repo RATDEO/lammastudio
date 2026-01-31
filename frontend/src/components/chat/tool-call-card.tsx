@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import type { ToolCall, ToolResult } from '@/lib/types';
 import { useAppStore } from '@/store';
+import { copyText } from '@/lib/clipboard';
 
 interface ToolCallCardProps {
   toolCall: ToolCall;
@@ -42,9 +43,11 @@ function ToolResultModal({ toolCallId, toolName, result, onClose }: ToolResultMo
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(result.content);
-      setLegacyToolCallCardState(modalKey, { modalCopied: true });
-      setTimeout(() => setLegacyToolCallCardState(modalKey, { modalCopied: false }), 2000);
+      const success = await copyText(result.content);
+      if (success) {
+        setLegacyToolCallCardState(modalKey, { modalCopied: true });
+        setTimeout(() => setLegacyToolCallCardState(modalKey, { modalCopied: false }), 2000);
+      }
     } catch (e) {
       console.error('Failed to copy:', e);
     }

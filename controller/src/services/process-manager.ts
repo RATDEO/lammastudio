@@ -12,7 +12,7 @@ import { delay } from "../core/async";
 import type { Logger } from "../core/logger";
 import type { LaunchResult, ProcessInfo, Recipe } from "../types/models";
 import type { EventManager } from "./event-manager";
-import { buildSglangCommand, buildVllmCommand, buildLlamaCppCommand } from "./backends";
+import { buildSglangCommand, buildVllmCommand, buildLlamaCppCommand, buildSdCppCommand } from "./backends";
 import {
     buildEnvironment,
     collectChildren,
@@ -71,6 +71,7 @@ export const createProcessManager = (
             let modelPath =
                 extractFlag(proc.args, "--model") ||
                 extractFlag(proc.args, "--model-path") ||
+                extractFlag(proc.args, "--diffusion-model") ||
                 extractFlag(proc.args, "-m");
             let servedModelName = extractFlag(proc.args, "--served-model-name") || extractFlag(proc.args, "--alias");
 
@@ -214,7 +215,9 @@ export const createProcessManager = (
                 ? buildSglangCommand(updatedRecipe, config)
                 : updatedRecipe.backend === "llamacpp"
                     ? buildLlamaCppCommand(updatedRecipe)
-                    : buildVllmCommand(updatedRecipe);
+                    : updatedRecipe.backend === "sdcpp"
+                        ? buildSdCppCommand(updatedRecipe)
+                        : buildVllmCommand(updatedRecipe);
 
         const logFile = resolve("/tmp", `vllm_${updatedRecipe.id}.log`);
         const env = buildEnvironment(updatedRecipe);

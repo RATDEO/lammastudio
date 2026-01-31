@@ -6,6 +6,7 @@ import type { UIMessage } from "@ai-sdk/react";
 import { Loader2 } from "lucide-react";
 import { ChatMessageItem } from "./chat-message-item";
 import { useAppStore } from "@/store";
+import { copyText } from "@/lib/clipboard";
 
 interface ChatMessageListProps {
   messages: UIMessage[];
@@ -40,21 +41,9 @@ export function ChatMessageList({
   const handleCopy = useCallback(async (text: string, messageId: string) => {
     if (!text.trim()) return;
     try {
-      if (navigator?.clipboard?.writeText) {
-        await navigator.clipboard.writeText(text);
-      } else {
-        const textarea = document.createElement("textarea");
-        textarea.value = text;
-        textarea.style.position = "fixed";
-        textarea.style.opacity = "0";
-        document.body.appendChild(textarea);
-        textarea.focus();
-        textarea.select();
-        const ok = document.execCommand("copy");
-        document.body.removeChild(textarea);
-        if (!ok) {
-          throw new Error("Clipboard copy failed");
-        }
+      const ok = await copyText(text);
+      if (!ok) {
+        throw new Error("Clipboard copy failed");
       }
       setCopiedMessageId(messageId);
       window.setTimeout(() => {

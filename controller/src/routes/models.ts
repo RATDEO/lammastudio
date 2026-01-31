@@ -138,7 +138,9 @@ export const registerModelsRoutes = (app: Hono, context: AppContext): void => {
         }
       }
       const modelId = recipe.served_model_name
-        ?? (recipe.backend === "llamacpp" && recipe.model_path ? basename(recipe.model_path) : null)
+        ?? ((recipe.backend === "llamacpp" || recipe.backend === "sdcpp") && recipe.model_path
+          ? basename(recipe.model_path)
+          : null)
         ?? recipe.id;
       const vision = Boolean((recipe.extra_args as Record<string, unknown>)?.mmproj);
       models.push({

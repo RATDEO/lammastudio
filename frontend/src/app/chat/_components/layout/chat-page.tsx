@@ -120,6 +120,9 @@ export function ChatPage() {
   const updateSessions = useAppStore((state) => state.updateSessions);
   const updateToolResultsMap = useAppStore((state) => state.updateToolResultsMap);
   const setMessageSources = useAppStore((state) => state.setMessageSources);
+  const setMessageSourceMap = useAppStore((state) => state.setMessageSourceMap);
+  const setToolResultsMap = useAppStore((state) => state.setToolResultsMap);
+  const setExecutingTools = useAppStore((state) => state.setExecutingTools);
   const messageSourceMap = useAppStore((state) => state.messageSourceMap);
   // Track the last user input for title generation
   const lastUserInputRef = useRef<string>("");
@@ -135,6 +138,12 @@ export function ChatPage() {
   const [compactionError, setCompactionError] = useState<string | null>(null);
   const lastCompactionSignatureRef = useRef<string | null>(null);
   const lastSearchSourcesRef = useRef<Array<{ title: string; url: string }>>([]);
+  const resetToolContext = useCallback(() => {
+    setExecutingTools(new Set());
+    setToolResultsMap(new Map());
+    setMessageSourceMap({});
+    lastSearchSourcesRef.current = [];
+  }, [setExecutingTools, setToolResultsMap, setMessageSourceMap]);
   const extractSourcesFromToolContent = (content: string) => {
     const sources: Array<{ title: string; url: string }> = [];
     const seen = new Set<string>();
@@ -877,6 +886,7 @@ URL: ${s.url}`)
       clearError?.();
       startNewSession();
       setMessages([]);
+      resetToolContext();
       setHasPendingUserMessage(false);
       setPendingUserText(null);
       setPendingStatus(null);
@@ -884,6 +894,7 @@ URL: ${s.url}`)
       return;
     }
     if (sessionFromUrl) {
+      resetToolContext();
       const cached = getSessionCache(sessionFromUrl);
       if (cached?.messages) {
         setIsRestoringSession(true);
@@ -911,6 +922,7 @@ URL: ${s.url}`)
     startNewSession,
     loadSession,
     setMessages,
+    resetToolContext,
     mapStoredMessages,
     selectedModel,
     setSelectedModel,

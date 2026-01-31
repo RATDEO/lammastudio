@@ -216,9 +216,9 @@ function RecipesContent() {
     }
   };
 
-  const handleEvictModel = async () => {
+  const handleEvictModel = async (port?: number) => {
     try {
-      await api.evictModel();
+      await api.evictModel(false, port);
       await loadRecipes();
     } catch (e) {
       alert("Failed to evict: " + (e as Error).message);
@@ -360,7 +360,7 @@ function RecipesContent() {
                     )}
                   </div>
                   <button
-                    onClick={handleEvictModel}
+                    onClick={() => handleEvictModel(recipes.find((r) => r.id === runningRecipeId)?.port)}
                     className="flex items-center gap-2 px-3 py-1.5 bg-[#dc2626] hover:bg-[#b91c1c] text-white rounded text-xs font-medium"
                   >
                     <Square className="w-3 h-3" />
@@ -450,7 +450,7 @@ function RecipesContent() {
                           <div className="flex items-center justify-end gap-2">
                             {recipe.status === "running" ? (
                               <button
-                                onClick={handleEvictModel}
+                                onClick={() => handleEvictModel(recipe.port ?? undefined)}
                                 className="p-1.5 hover:bg-[#dc2626]/20 text-[#dc2626] rounded transition-colors"
                                 title="Stop"
                               >
@@ -724,6 +724,43 @@ function generateCommand(recipe: Recipe): string {
     return args.join(" \\\n  ");
   }
 
+  if (backend === "sdcpp") {
+    const extraArgs = (recipe.extra_args as Record<string, unknown>) || {};
+    const serverPath = (extraArgs?.sdcpp_server_path as string) || "sdcpp-server.py";
+    const sdCliPath = (extraArgs?.sd_cli_path as string) || "sd-cli";
+    const baseArgs: string[] = [];
+
+    if (recipe.model_path) {
+      baseArgs.push("--diffusion-model", recipe.model_path);
+    }
+    if (typeof extraArgs?.vae === "string" && extraArgs.vae) {
+      baseArgs.push("--vae", extraArgs.vae);
+    }
+    if (typeof extraArgs?.llm === "string" && extraArgs.llm) {
+      baseArgs.push("--llm", extraArgs.llm);
+    }
+    if (typeof extraArgs?.llm_vision === "string" && extraArgs.llm_vision) {
+      baseArgs.push("--llm_vision", extraArgs.llm_vision);
+    }
+    if (extraArgs?.["diffusion-fa"]) {
+      baseArgs.push("--diffusion-fa");
+    }
+    if (extraArgs?.["offload-to-cpu"]) {
+      baseArgs.push("--offload-to-cpu");
+    }
+
+    args.push(`python3 ${serverPath}`);
+    args.push(`--sd-cli ${sdCliPath}`);
+    if (baseArgs.length > 0) {
+      args.push(`--base-args-json '${JSON.stringify(baseArgs)}'`);
+    }
+    args.push(`--host ${recipe.host || "0.0.0.0"}`);
+    args.push(`--port ${recipe.port || 8000}`);
+
+    return args.join(" \
+  ");
+  }
+
   // Base command for vLLM/SGLang
   if (backend === "vllm") {
     args.push("vllm serve");
@@ -807,6 +844,11 @@ function RecipeModal({
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [mode, setMode] = useState<"form" | "command">("form");
   const [editedCommand, setEditedCommand] = useState<string | null>(null);
+
+  const backend = recipe.backend ?? "vllm";
+  const isLlamaCpp = backend === "llamacpp";
+  const isSdCpp = backend === "sdcpp";
+  const isNativeBackend = isLlamaCpp || isSdCpp;
 
   // Build a lookup: model_path -> served_model_name (from first recipe that uses it)
   const modelServedNames = useMemo(() => {
@@ -960,13 +1002,14 @@ function RecipeModal({
               <select
                 value={recipe.backend ?? "vllm"}
                 onChange={(e) =>
-                  onChange({ ...recipe, backend: e.target.value as "vllm" | "sglang" | "llamacpp" })
+                  onChange({ ...recipe, backend: e.target.value as "vllm" | "sglang" | "llamacpp" | "sdcpp" })
                 }
                 className="w-full px-3 py-2 bg-[#0d0d0d] border border-[#363432] rounded-lg text-sm focus:outline-none focus:border-[#d97706]"
               >
                 <option value="vllm">vLLM</option>
                 <option value="sglang">SGLang</option>
                 <option value="llamacpp">llama.cpp</option>
+                <option value="sdcpp">sd.cpp</option>
               </select>
             </div>
             <div>
@@ -1004,7 +1047,7 @@ function RecipeModal({
           </div>
 
           {/* llama.cpp specific fields */}
-          {recipe.backend === "llamacpp" && (
+          {isLlamaCpp && (
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm text-[#9a9088] mb-2">GPU Layers (ngl)</label>
@@ -1043,8 +1086,122 @@ function RecipeModal({
             </div>
           )}
 
+          {/* sd.cpp specific fields */}
+          {isSdCpp && (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm text-[#9a9088] mb-2">sd-cli Path</label>
+                <input
+                  type="text"
+                  value={(recipe.extra_args as Record<string, unknown>)?.sd_cli_path ?? ""}
+                  onChange={(e) => {
+                    const newExtraArgs = { ...(recipe.extra_args || {}) } as Record<string, unknown>;
+                    if (e.target.value) {
+                      newExtraArgs.sd_cli_path = e.target.value;
+                    } else {
+                      delete newExtraArgs.sd_cli_path;
+                    }
+                    onChange({ ...recipe, extra_args: newExtraArgs });
+                  }}
+                  placeholder="sd-cli"
+                  className="w-full px-3 py-2 bg-[#0d0d0d] border border-[#363432] rounded-lg text-sm focus:outline-none focus:border-[#d97706]"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-[#9a9088] mb-2">VAE Path</label>
+                <input
+                  type="text"
+                  value={(recipe.extra_args as Record<string, unknown>)?.vae ?? ""}
+                  onChange={(e) => {
+                    const newExtraArgs = { ...(recipe.extra_args || {}) } as Record<string, unknown>;
+                    if (e.target.value) {
+                      newExtraArgs.vae = e.target.value;
+                    } else {
+                      delete newExtraArgs.vae;
+                    }
+                    onChange({ ...recipe, extra_args: newExtraArgs });
+                  }}
+                  placeholder="/models/qwen_image_vae.safetensors"
+                  className="w-full px-3 py-2 bg-[#0d0d0d] border border-[#363432] rounded-lg text-sm focus:outline-none focus:border-[#d97706]"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-[#9a9088] mb-2">LLM Path</label>
+                <input
+                  type="text"
+                  value={(recipe.extra_args as Record<string, unknown>)?.llm ?? ""}
+                  onChange={(e) => {
+                    const newExtraArgs = { ...(recipe.extra_args || {}) } as Record<string, unknown>;
+                    if (e.target.value) {
+                      newExtraArgs.llm = e.target.value;
+                    } else {
+                      delete newExtraArgs.llm;
+                    }
+                    onChange({ ...recipe, extra_args: newExtraArgs });
+                  }}
+                  placeholder="/models/Qwen2.5-VL-7B-Instruct-Q8_0.gguf"
+                  className="w-full px-3 py-2 bg-[#0d0d0d] border border-[#363432] rounded-lg text-sm focus:outline-none focus:border-[#d97706]"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-[#9a9088] mb-2">LLM Vision Path</label>
+                <input
+                  type="text"
+                  value={(recipe.extra_args as Record<string, unknown>)?.llm_vision ?? ""}
+                  onChange={(e) => {
+                    const newExtraArgs = { ...(recipe.extra_args || {}) } as Record<string, unknown>;
+                    if (e.target.value) {
+                      newExtraArgs.llm_vision = e.target.value;
+                    } else {
+                      delete newExtraArgs.llm_vision;
+                    }
+                    onChange({ ...recipe, extra_args: newExtraArgs });
+                  }}
+                  placeholder="/models/qwen2.5-vl-vision.gguf"
+                  className="w-full px-3 py-2 bg-[#0d0d0d] border border-[#363432] rounded-lg text-sm focus:outline-none focus:border-[#d97706]"
+                />
+              </div>
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2 text-sm text-[#9a9088]">
+                  <input
+                    type="checkbox"
+                    checked={!!(recipe.extra_args as Record<string, unknown>)?.["diffusion-fa"]}
+                    onChange={(e) => {
+                      const newExtraArgs = { ...(recipe.extra_args || {}) } as Record<string, unknown>;
+                      if (e.target.checked) {
+                        newExtraArgs["diffusion-fa"] = true;
+                      } else {
+                        delete newExtraArgs["diffusion-fa"];
+                      }
+                      onChange({ ...recipe, extra_args: newExtraArgs });
+                    }}
+                    className="rounded border-[#363432] bg-[#0d0d0d]"
+                  />
+                  Diffusion Flash Attention
+                </label>
+                <label className="flex items-center gap-2 text-sm text-[#9a9088]">
+                  <input
+                    type="checkbox"
+                    checked={!!(recipe.extra_args as Record<string, unknown>)?.["offload-to-cpu"]}
+                    onChange={(e) => {
+                      const newExtraArgs = { ...(recipe.extra_args || {}) } as Record<string, unknown>;
+                      if (e.target.checked) {
+                        newExtraArgs["offload-to-cpu"] = true;
+                      } else {
+                        delete newExtraArgs["offload-to-cpu"];
+                      }
+                      onChange({ ...recipe, extra_args: newExtraArgs });
+                    }}
+                    className="rounded border-[#363432] bg-[#0d0d0d]"
+                  />
+                  Offload to CPU
+                </label>
+              </div>
+            </div>
+          )}
+
           {/* GGUF warning for llamacpp */}
-          {recipe.backend === "llamacpp" && recipe.model_path && !recipe.model_path.endsWith(".gguf") && (
+          {isLlamaCpp && recipe.model_path && !recipe.model_path.endsWith(".gguf") && (
             <div className="p-3 bg-[#d97706]/10 border border-[#d97706]/30 rounded-lg">
               <p className="text-sm text-[#fbbf24]">
                 ⚠️ llama.cpp requires GGUF model files. The selected model path doesn&apos;t end in .gguf
@@ -1053,7 +1210,7 @@ function RecipeModal({
           )}
 
           {/* GPU Memory Utilization - hide for llamacpp */}
-          {recipe.backend !== "llamacpp" && (
+          {!isNativeBackend && (
           <div>
             <label className="block text-sm text-[#9a9088] mb-2">GPU Memory Utilization</label>
             <input
@@ -1088,9 +1245,10 @@ function RecipeModal({
                   <h4 className="text-xs uppercase tracking-wider text-[#6a6560] font-medium">
                     Model Loading
                   </h4>
+                  {!isSdCpp && (
                   <div>
                     <label className="block text-sm text-[#9a9088] mb-2">
-                      {recipe.backend === "llamacpp" ? "Context Size" : "Max Model Length"}
+                      {isLlamaCpp ? "Context Size" : "Max Model Length"}
                     </label>
                     <input
                       type="number"
@@ -1098,12 +1256,13 @@ function RecipeModal({
                       onChange={(e) =>
                         onChange({ ...recipe, max_model_len: Number(e.target.value) || undefined })
                       }
-                      placeholder={recipe.backend === "llamacpp" ? "4096" : "32768"}
+                      placeholder={isLlamaCpp ? "4096" : "32768"}
                       className="w-full px-3 py-2 bg-[#0d0d0d] border border-[#363432] rounded-lg text-sm focus:outline-none focus:border-[#d97706]"
                     />
                   </div>
+                  )}
                   {/* Quantization & Dtype - hide for llamacpp */}
-                  {recipe.backend !== "llamacpp" && (
+                  {!isNativeBackend && (
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm text-[#9a9088] mb-2">Quantization</label>
@@ -1134,7 +1293,7 @@ function RecipeModal({
                     </div>
                   </div>
                   )}
-                  {recipe.backend !== "llamacpp" && (
+                  {!isNativeBackend && (
                   <div className="flex flex-wrap gap-4">
                     <label className="flex items-center gap-2 text-sm text-[#9a9088]">
                       <input
@@ -1150,7 +1309,7 @@ function RecipeModal({
                 </div>
 
                 {/* Memory & KV Cache - hide for llamacpp */}
-                {recipe.backend !== "llamacpp" && (
+                {!isNativeBackend && (
                 <div className="space-y-4 pt-4 border-t border-[#363432]/50">
                   <h4 className="text-xs uppercase tracking-wider text-[#6a6560] font-medium">
                     Memory & KV Cache
@@ -1214,7 +1373,7 @@ function RecipeModal({
                 )}
 
                 {/* Performance - hide for llamacpp */}
-                {recipe.backend !== "llamacpp" && (
+                {!isNativeBackend && (
                 <div className="space-y-4 pt-4 border-t border-[#363432]/50">
                   <h4 className="text-xs uppercase tracking-wider text-[#6a6560] font-medium">
                     Performance
@@ -1235,7 +1394,7 @@ function RecipeModal({
                 )}
 
                 {/* Tool Calling & Reasoning - hide for llamacpp */}
-                {recipe.backend !== "llamacpp" && (
+                {!isNativeBackend && (
                 <div className="space-y-4 pt-4 border-t border-[#363432]/50">
                   <h4 className="text-xs uppercase tracking-wider text-[#6a6560] font-medium">
                     Tool Calling & Reasoning
@@ -1405,7 +1564,7 @@ function RecipeModal({
                         className="w-full px-3 py-2 bg-[#0d0d0d] border border-[#363432] rounded-lg text-sm focus:outline-none focus:border-[#d97706]"
                       />
                     </div>
-                    {recipe.backend !== "llamacpp" && (
+                    {!isNativeBackend && (
                     <div>
                       <label className="block text-sm text-[#9a9088] mb-2">Chat Template</label>
                       <input

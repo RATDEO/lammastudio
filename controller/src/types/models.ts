@@ -4,7 +4,7 @@ import type { RecipeId } from "./brand";
 /**
  * Supported inference backends.
  */
-export type Backend = "vllm" | "sglang" | "transformers" | "tabbyapi" | "llamacpp";
+export type Backend = "vllm" | "sglang" | "transformers" | "tabbyapi" | "llamacpp" | "sdcpp";
 
 /**
  * Model launch configuration.

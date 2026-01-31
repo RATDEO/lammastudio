@@ -165,7 +165,7 @@ export const appendExtraArguments = (command: string[], extraArguments: Record<s
     if (internalKeys.has(normalizedKey)) {
       continue;
     }
-    const flag = `--${key.replace(/_/g, "-")}`;
+    const flag = key.startsWith("--") ? key : `--${key}`;
     if (command.includes(flag)) {
       continue;
     }
@@ -336,7 +336,7 @@ const appendLlamaCppExtraArguments = (
       continue;
     }
 
-    const flag = `--${key.replace(/_/g, "-")}`;
+    const flag = key.startsWith("--") ? key : `--${key}`;
     if (command.includes(flag)) {
       continue;
     }
@@ -435,4 +435,127 @@ export const buildLlamaCppCommand = (recipe: Recipe): string[] => {
 
   // Append any additional extra_args
   return appendLlamaCppExtraArguments(command, recipe.extra_args);
+};
+
+
+/**
+ * Append stable-diffusion.cpp arguments to a command.
+ * @param command - Command array.
+ * @param extraArguments - Extra args object.
+ * @returns Updated command array.
+ */
+const appendSdCppArguments = (
+  command: string[],
+  extraArguments: Record<string, unknown>
+): string[] => {
+  const handledKeys = new Set([
+    "sdcpp_server_path",
+    "sd_cli_path",
+    "sd_base_args",
+    "sdcpp_timeout_seconds",
+    "timeout_seconds",
+    "sdcpp_output_dir",
+    "env_vars",
+    "cuda_visible_devices",
+    "description",
+    "tags",
+    "status",
+  ]);
+
+  for (const [key, value] of Object.entries(extraArguments)) {
+    const normalizedKey = key.replace(/-/g, "_").toLowerCase();
+    if (handledKeys.has(normalizedKey)) {
+      continue;
+    }
+
+    const flag = key.startsWith("--") ? key : `--${key}`;
+    if (command.includes(flag)) {
+      continue;
+    }
+
+    if (value === true) {
+      command.push(flag);
+      continue;
+    }
+    if (value === false || value === undefined || value === null) {
+      continue;
+    }
+    if (Array.isArray(value)) {
+      command.push(flag, value.join(","));
+      continue;
+    }
+    if (typeof value === "object") {
+      command.push(flag, JSON.stringify(value));
+      continue;
+    }
+    command.push(flag, String(value));
+  }
+
+  return command;
+};
+
+/**
+ * Build a stable-diffusion.cpp server launch command.
+ * @param recipe - Recipe data.
+ * @returns CLI command array.
+ */
+export const buildSdCppCommand = (recipe: Recipe): string[] => {
+  const python = getPythonPath(recipe) ?? "python3";
+
+  const serverPath = getExtraArgument(recipe.extra_args, "sdcpp_server_path");
+  let server = typeof serverPath === "string"
+    ? serverPath
+    : resolve(process.cwd(), "runtime", "bin", "sdcpp-server.py");
+
+  if (!existsSync(server)) {
+    const alt = resolve(process.cwd(), "controller", "runtime", "bin", "sdcpp-server.py");
+    if (existsSync(alt)) {
+      server = alt;
+    }
+  }
+
+  const sdCliPath = getExtraArgument(recipe.extra_args, "sd_cli_path")
+    ?? process.env["SD_CLI_PATH"]
+    ?? "sd-cli";
+
+  const baseArgsOverride = getExtraArgument(recipe.extra_args, "sd_base_args");
+  const baseArgs: string[] = [];
+  if (Array.isArray(baseArgsOverride)) {
+    baseArgs.push(...baseArgsOverride.map((entry) => String(entry)));
+  } else if (typeof baseArgsOverride === "string" && baseArgsOverride.trim()) {
+    baseArgs.push(...baseArgsOverride.trim().split(/\s+/g));
+  } else {
+    if (recipe.model_path) {
+      baseArgs.push("--diffusion-model", recipe.model_path);
+    }
+    appendSdCppArguments(baseArgs, recipe.extra_args);
+  }
+
+  const command = [
+    python,
+    server,
+    "--host",
+    recipe.host,
+    "--port",
+    String(recipe.port),
+    "--sd-cli",
+    String(sdCliPath),
+  ];
+
+  if (baseArgs.length > 0) {
+    command.push("--base-args-json", JSON.stringify(baseArgs));
+  }
+
+  const timeoutSeconds = getExtraArgument(recipe.extra_args, "sdcpp_timeout_seconds")
+    ?? getExtraArgument(recipe.extra_args, "timeout_seconds");
+  if (timeoutSeconds !== undefined && timeoutSeconds !== null) {
+    command.push("--timeout-seconds", String(timeoutSeconds));
+  }
+
+  const outputDir = getExtraArgument(recipe.extra_args, "sdcpp_output_dir");
+  if (typeof outputDir === "string" && outputDir.trim()) {
+    command.push("--output-dir", outputDir);
+  }
+
+  return command;
 };

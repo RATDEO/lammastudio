@@ -19,6 +19,7 @@ import {
 import { CodeSandbox } from './code-sandbox';
 import type { Artifact } from '@/lib/types';
 import { useAppStore } from '@/store';
+import { copyText } from '@/lib/clipboard';
 
 // SVG template - wraps SVG in proper HTML document for iframe rendering
 const SVG_TEMPLATE = (svgCode: string) => `
@@ -74,13 +75,13 @@ export function ArtifactRenderer({ artifact, onRun }: ArtifactRendererProps) {
   };
 
   const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(artifact.code);
+    const success = await copyText(artifact.code);
+    if (success) {
       updateState({ copied: true });
       setTimeout(() => updateState({ copied: false }), 2000);
-    } catch (e) {
-      console.error('Failed to copy:', e);
+      return;
     }
+    console.error('Failed to copy artifact');
   };
 
   const handleDownload = () => {

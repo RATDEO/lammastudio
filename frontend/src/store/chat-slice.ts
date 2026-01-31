@@ -318,6 +318,7 @@ export interface ChatActions {
 
   setCopiedMessageId: (copiedMessageId: string | null) => void;
   setMessageSources: (messageId: string, sources: Array<{ title: string; url: string }>) => void;
+  setMessageSourceMap: (messageSourceMap: Record<string, Array<{ title: string; url: string }>>) => void;
   setMessageInlineThinkingExpanded: (messageId: string, expanded: boolean) => void;
   setMessageInlineToolsExpanded: (messageId: string, expanded: boolean) => void;
 
@@ -663,6 +664,7 @@ export const createChatSlice: StateCreator<ChatSlice, [], [], ChatSlice> = (set)
         [messageId]: sources,
       },
     })),
+  setMessageSourceMap: (messageSourceMap) => set({ messageSourceMap }),
   setMessageInlineThinkingExpanded: (messageId, expanded) =>
     set((state) => ({
       messageInlineThinkingExpanded: {

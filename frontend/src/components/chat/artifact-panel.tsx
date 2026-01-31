@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import type { Artifact } from '@/lib/types';
 import { useAppStore } from '@/store';
+import { copyText } from '@/lib/clipboard';
 
 // ============================================================================
 // ARTIFACT VIEWER - Full-featured viewer with pan/zoom/interact
@@ -349,9 +350,13 @@ export function ArtifactViewer({ artifact, isActive = true, onClose }: ArtifactV
   };
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(artifact.code);
-    updateState({ copied: true });
-    setTimeout(() => updateState({ copied: false }), 2000);
+    const success = await copyText(artifact.code);
+    if (success) {
+      updateState({ copied: true });
+      setTimeout(() => updateState({ copied: false }), 2000);
+      return;
+    }
+    console.error('Failed to copy artifact');
   };
 
   const handleDownload = () => {

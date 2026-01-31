@@ -14,6 +14,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { useAppStore } from '@/store';
+import { copyText } from '@/lib/clipboard';
 
 interface CodeSandboxProps {
   code: string;
@@ -222,10 +223,12 @@ export function CodeSandbox({
     }
   }, [updateState]);
 
-  const copyCode = useCallback(() => {
-    navigator.clipboard.writeText(code);
-    updateState({ copied: true });
-    setTimeout(() => updateState({ copied: false }), 2000);
+  const copyCode = useCallback(async () => {
+    const success = await copyText(code);
+    if (success) {
+      updateState({ copied: true });
+      setTimeout(() => updateState({ copied: false }), 2000);
+    }
   }, [code, updateState]);
 
   const downloadCode = useCallback(() => {

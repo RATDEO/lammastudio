@@ -18,7 +18,7 @@ export interface Recipe {
   id: string;
   name: string;
   model_path: string;
-  backend?: "vllm" | "sglang" | "llamacpp";
+  backend?: "vllm" | "sglang" | "llamacpp" | "sdcpp";
 
   // Server settings
   host?: string;
